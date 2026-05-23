@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Signal History</title>
+  <style>
+    body { font-family: monospace; background: #0d1117; color: #e6edf3; padding: 20px; }
+    nav a { color: #58a6ff; margin-right: 20px; text-decoration: none; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { background: #161b22; padding: 8px; text-align: left; color: #8b949e; }
+    td { padding: 8px; border-bottom: 1px solid #21262d; }
+    tr:hover { background: #161b22; }
+    .LONG { color: #3fb950; }
+    .SHORT { color: #f85149; }
+    .TARGET_HIT { color: #3fb950; }
+    .STOP_HIT { color: #f85149; }
+    .EXPIRED { color: #8b949e; }
+    .PENDING { color: #58a6ff; }
+    select, input { background: #161b22; color: #e6edf3; border: 1px solid #30363d; padding: 4px 8px; border-radius: 4px; margin-right: 8px; }
+    h2 { color: #58a6ff; }
+  </style>
+</head>
+<body>
+  <nav>
+    <a href="/">Live Feed</a>
+    <a href="/history">Signal History</a>
+    <a href="/performance">Performance</a>
+    <a href="/positions">Open Positions</a>
+  </nav>
+  <h2>Signal History</h2>
+  <div style="margin-bottom:12px">
+    <select id="marketFilter" onchange="load()">
+      <option value="">All markets</option>
+      <option value="crypto">Crypto</option>
+      <option value="india">India</option>
+    </select>
+    <select id="outcomeFilter" onchange="load()">
+      <option value="">All outcomes</option>
+      <option value="PENDING">Pending</option>
+      <option value="TARGET_HIT">Target Hit</option>
+      <option value="STOP_HIT">Stop Hit</option>
+      <option value="EXPIRED">Expired</option>
+    </select>
+  </div>
+  <table>
+    <thead><tr>
+      <th>Date</th><th>Market</th><th>Ticker</th><th>Direction</th>
+      <th>Confidence</th><th>Executed</th><th>Outcome</th>
+      <th>Hyp. P&amp;L</th><th>Actual P&amp;L</th>
+    </tr></thead>
+    <tbody id="tbody"></tbody>
+  </table>
+  <script>
+    function load() {
+      const m = document.getElementById('marketFilter').value;
+      const o = document.getElementById('outcomeFilter').value;
+      let url = '/api/signals?limit=500';
+      if (m) url += `&market=${m}`;
+      if (o) url += `&outcome=${o}`;
+      fetch(url).then(r => r.json()).then(signals => {
+        const tbody = document.getElementById('tbody');
+        tbody.innerHTML = signals.reverse().map(s => `
+          <tr>
+            <td>${new Date(s.generated_at).toLocaleDateString()}</td>
+            <td>${s.market}</td>
+            <td>${s.ticker}</td>
+            <td class="${s.direction}">${s.direction}</td>
+            <td>${(s.confidence * 100).toFixed(0)}%</td>
+            <td>${s.executed ? '✅' : '—'}</td>
+            <td class="${s.outcome}">${s.outcome}</td>
+            <td style="color:${s.hypothetical_pnl_inr >= 0 ? '#3fb950' : '#f85149'}">
+              ${s.hypothetical_pnl_inr != null ? `₹${s.hypothetical_pnl_inr.toFixed(0)} (${(s.hypothetical_pnl_pct * 100).toFixed(1)}%)` : '—'}
+            </td>
+            <td style="color:${s.executed && s.hypothetical_pnl_inr >= 0 ? '#3fb950' : '#f85149'}">
+              ${s.executed && s.hypothetical_pnl_inr != null ? `₹${s.hypothetical_pnl_inr.toFixed(0)}` : '—'}
+            </td>
+          </tr>`).join('');
+      });
+    }
+    load();
+  </script>
+</body>
+</html>

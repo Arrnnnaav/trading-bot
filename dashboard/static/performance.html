@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Performance</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: monospace; background: #0d1117; color: #e6edf3; padding: 20px; }
+    nav a { color: #58a6ff; margin-right: 20px; text-decoration: none; }
+    .stats { display: flex; gap: 20px; flex-wrap: wrap; margin: 20px 0; }
+    .stat-card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; min-width: 140px; }
+    .stat-value { font-size: 24px; font-weight: bold; }
+    .green { color: #3fb950; }
+    .red { color: #f85149; }
+    h2, h3 { color: #58a6ff; }
+    canvas { max-width: 700px; margin: 20px 0; }
+  </style>
+</head>
+<body>
+  <nav>
+    <a href="/">Live Feed</a>
+    <a href="/history">Signal History</a>
+    <a href="/performance">Performance</a>
+    <a href="/positions">Open Positions</a>
+  </nav>
+  <h2>Performance Analytics</h2>
+  <div class="stats" id="stats"></div>
+  <h3>Hypothetical Portfolio Curve</h3>
+  <canvas id="hypChart"></canvas>
+  <h3>Actual Portfolio Curve</h3>
+  <canvas id="actChart"></canvas>
+  <script>
+    Promise.all([fetch('/api/performance').then(r => r.json()), fetch('/api/signals?limit=500').then(r => r.json())])
+      .then(([perf, signals]) => {
+        document.getElementById('stats').innerHTML = `
+          <div class="stat-card"><div style="color:#8b949e">Total Signals</div><div class="stat-value">${perf.total_signals}</div></div>
+          <div class="stat-card"><div style="color:#8b949e">Win Rate</div><div class="stat-value ${perf.win_rate >= 0.5 ? 'green' : 'red'}">${(perf.win_rate * 100).toFixed(1)}%</div></div>
+          <div class="stat-card"><div style="color:#8b949e">W/L</div><div class="stat-value">${perf.wins}/${perf.losses}</div></div>
+          <div class="stat-card"><div style="color:#8b949e">Hyp. P&L</div><div class="stat-value ${perf.total_hypothetical_pnl_inr >= 0 ? 'green' : 'red'}">₹${perf.total_hypothetical_pnl_inr.toFixed(0)}</div></div>
+          <div class="stat-card"><div style="color:#8b949e">Actual P&L</div><div class="stat-value ${perf.total_actual_pnl_inr >= 0 ? 'green' : 'red'}">₹${perf.total_actual_pnl_inr.toFixed(0)}</div></div>
+        `;
+
+        const resolved = signals.filter(s => s.outcome !== 'PENDING' && s.hypothetical_pnl_inr != null)
+                                 .sort((a, b) => new Date(a.generated_at) - new Date(b.generated_at));
+
+        let hypBalance = 100000, actBalance = 100000;
+        const hypData = [], actData = [], labels = [];
+        for (const s of resolved) {
+          hypBalance += s.hypothetical_pnl_inr || 0;
+          if (s.executed) actBalance += s.hypothetical_pnl_inr || 0;
+          labels.push(new Date(s.generated_at).toLocaleDateString());
+          hypData.push(hypBalance);
+          actData.push(s.executed ? actBalance : null);
+        }
+
+        const chartOpts = { responsive: true, plugins: { legend: { labels: { color: '#e6edf3' } } }, scales: { x: { ticks: { color: '#8b949e' } }, y: { ticks: { color: '#8b949e' } } } };
+        new Chart(document.getElementById('hypChart'), { type: 'line', data: { labels, datasets: [{ label: 'Hypothetical Portfolio (₹)', data: hypData, borderColor: '#58a6ff', fill: false, pointRadius: 2 }] }, options: chartOpts });
+        new Chart(document.getElementById('actChart'), { type: 'line', data: { labels, datasets: [{ label: 'Actual Portfolio (₹)', data: actData, borderColor: '#3fb950', fill: false, pointRadius: 2, spanGaps: true }] }, options: chartOpts });
+      });
+  </script>
+</body>
+</html>

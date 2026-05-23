@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Trading Bot — Live Feed</title>
+  <style>
+    body { font-family: monospace; background: #0d1117; color: #e6edf3; padding: 20px; }
+    nav a { color: #58a6ff; margin-right: 20px; text-decoration: none; }
+    .signal-card { border: 1px solid #30363d; border-radius: 8px; padding: 16px; margin: 10px 0; max-width: 500px; }
+    .LONG { border-left: 4px solid #3fb950; }
+    .SHORT { border-left: 4px solid #f85149; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; }
+    .PENDING { background: #388bfd22; color: #58a6ff; }
+    .TARGET_HIT { background: #3fb95022; color: #3fb950; }
+    .STOP_HIT { background: #f8514922; color: #f85149; }
+    .EXPIRED { background: #8b949e22; color: #8b949e; }
+    h2 { color: #58a6ff; }
+  </style>
+</head>
+<body>
+  <nav>
+    <a href="/">Live Feed</a>
+    <a href="/history">Signal History</a>
+    <a href="/performance">Performance</a>
+    <a href="/positions">Open Positions</a>
+  </nav>
+  <h2>Live Signal Feed</h2>
+  <div id="feed"></div>
+  <script>
+    const ws = new WebSocket(`ws://${location.host}/ws/signals`);
+    ws.onmessage = (e) => {
+      const msg = JSON.parse(e.data);
+      if (msg.type === 'signal') renderCard(msg.data);
+    };
+
+    function renderCard(s) {
+      const div = document.createElement('div');
+      div.className = `signal-card ${s.direction}`;
+      const pnl = s.hypothetical_pnl_inr != null
+        ? `<br>P&L: ${s.hypothetical_pnl_pct > 0 ? '🟢' : '🔴'} ₹${s.hypothetical_pnl_inr?.toFixed(0)} (${(s.hypothetical_pnl_pct * 100)?.toFixed(1)}%)`
+        : '';
+      div.innerHTML = `
+        <strong>${s.direction} ${s.ticker}</strong>
+        <span class="badge ${s.outcome}" style="float:right">${s.outcome}</span><br>
+        Entry ₹${s.entry_price?.toFixed(1)} → Target ₹${s.target_price?.toFixed(1)} | Stop ₹${s.stop_price?.toFixed(1)}<br>
+        Confidence: ${(s.confidence * 100).toFixed(0)}% | Size: ₹${s.position_size_inr?.toFixed(0)}
+        ${pnl}
+        <br><small style="color:#8b949e">${new Date(s.generated_at).toLocaleString()}</small>
+      `;
+      document.getElementById('feed').prepend(div);
+    }
+
+    fetch('/api/signals?limit=20').then(r => r.json()).then(signals => {
+      signals.reverse().forEach(renderCard);
+    });
+  </script>
+</body>
+</html>

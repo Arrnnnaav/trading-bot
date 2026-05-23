@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Open Positions</title>
+  <style>
+    body { font-family: monospace; background: #0d1117; color: #e6edf3; padding: 20px; }
+    nav a { color: #58a6ff; margin-right: 20px; text-decoration: none; }
+    .pos-card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; margin: 10px 0; max-width: 480px; }
+    .LONG { border-left: 4px solid #3fb950; }
+    .SHORT { border-left: 4px solid #f85149; }
+    h2 { color: #58a6ff; }
+    #refresh { color: #8b949e; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <nav>
+    <a href="/">Live Feed</a>
+    <a href="/history">Signal History</a>
+    <a href="/performance">Performance</a>
+    <a href="/positions">Open Positions</a>
+  </nav>
+  <h2>Open Positions <span id="refresh"></span></h2>
+  <div id="positions"></div>
+  <script>
+    function load() {
+      fetch('/api/open-positions').then(r => r.json()).then(positions => {
+        const div = document.getElementById('positions');
+        if (positions.length === 0) { div.innerHTML = '<p style="color:#8b949e">No open positions</p>'; return; }
+        div.innerHTML = positions.map(p => `
+          <div class="pos-card ${p.direction}">
+            <strong>${p.direction} ${p.ticker}</strong>
+            <span style="float:right;color:#8b949e">${p.market}</span><br>
+            Entry: ₹${p.entry_price?.toFixed(1)} | Stop: ₹${p.stop_price?.toFixed(1)} | Target: ₹${p.target_price?.toFixed(1)}<br>
+            Size: ₹${p.size_inr?.toFixed(0)}
+            ${p.option_type ? `<br>Option: ATM ${p.option_type} Strike ${p.strike} Expiry ${p.expiry}` : ''}
+            <br><small style="color:#8b949e">Opened ${new Date(p.opened_at).toLocaleString()}</small>
+          </div>`).join('');
+        document.getElementById('refresh').textContent = `Updated ${new Date().toLocaleTimeString()}`;
+      });
+    }
+    load();
+    setInterval(load, 30000);
+  </script>
+</body>
+</html>
