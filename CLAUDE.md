@@ -1,5 +1,12 @@
 # Trading Bot v1 — Project Context
 
+## Before Making Any Changes
+
+A knowledge graph of this codebase exists at `graphify-out/graph.json` with an interactive view at `graphify-out/graph.html` and summary at `graphify-out/GRAPH_REPORT.md`.
+
+**Use it before touching code.** Run `/graphify query "<your question>"` or read `GRAPH_REPORT.md` to locate relevant nodes, dependencies, and affected components. Do NOT scan files one by one — the graph already maps every relationship. This reduces token usage and avoids missing cross-component impacts.
+
+
 ## Status: COMPLETE (built 2026-05-23, 25 tests passing)
 
 Semi-automated crypto + Indian market trading bot. Generates BUY/SELL/HOLD signals → sends to Telegram with entry/target/stop/size → user taps EXECUTE → bot places order via broker API → stop-loss managed automatically in background.
