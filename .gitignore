@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.env
+venv/
+.venv/
+*.egg-info/
+dist/
+build/
+
+# Data files — personal trading state, not source code
+data/crypto_progress.json
+data/india_progress.json
+data/signal_log.json
