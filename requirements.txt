@@ -12,3 +12,11 @@ pytest-asyncio==0.23.6
 pytest-mock==3.14.0
 pytz==2024.1
 numpy
+torch>=2.2.0
+chronos-forecasting>=1.2.0
+pandas>=2.0.0
+pyarrow>=14.0.0
+scikit-learn>=1.4.0
+matplotlib>=3.8.0
+tqdm>=4.66.0
+requests>=2.31.0
