@@ -14,9 +14,9 @@ from pathlib import Path
 EPOCH_RE = re.compile(
     r"Epoch\s+(\d+)/(\d+)\s+"
     r"train_loss=([\d.]+)\s+"
-    r"(?:T=[\d.]+\s+)?"  # optional temperature
+    r"(?:T=[\d.]+\s+)?"  # optional temperature (v2)
     r".*?val_loss=([\d.]+)\s+"
-    r".*?macro_f1=([\d.]+)"
+    r".*?(?:val_f1|macro_f1)=([\d.]+)"  # v1 uses val_f1, v2 uses macro_f1
     r"(?:\s+\[LONG=([\d.]+)\s+SHORT=([\d.]+)\s+HOLD=([\d.]+)\])?"
     r"(?:.*?preds%:\s*LONG=([\d.]+)\s+SHORT=([\d.]+)\s+HOLD=([\d.]+))?",
     re.IGNORECASE,
