@@ -25,9 +25,9 @@ class BaseHarness:
         self.agents = agents
         self.telegram_bot = telegram_bot
         self.aggregator = signal_aggregator
-        self.debate_engine = DebateEngine()
-        self.risk_manager = RiskManager(self.MARKET)
         self.state = self._load_state()
+        self.debate_engine = DebateEngine(learnings=self.state.agent_learnings)
+        self.risk_manager = RiskManager(self.MARKET)
 
     def _load_state(self) -> HarnessState:
         try:
@@ -108,5 +108,18 @@ Write 3 concise sentences about: (1) which setups worked, (2) which failed, (3) 
             max_tokens=200,
             messages=[{"role": "user", "content": summary_prompt}],
         )
-        self.state.agent_learnings = resp.content[0].text.strip()
+        learnings = resp.content[0].text.strip()
+        self.state.agent_learnings = learnings
         self._save_state()
+
+        # Route learnings to DebateEngine (where LLM actually runs)
+        self.debate_engine.update_learnings(learnings)
+
+        # Write human-readable log
+        from pathlib import Path
+
+        log_path = Path("data") / f"{self.MARKET.value}_learnings.md"
+        log_path.parent.mkdir(exist_ok=True)
+        with open(log_path, "a") as f:
+            ts = datetime.now(timezone.utc).isoformat()
+            f.write(f"\n## {ts}\n{learnings}\n")
