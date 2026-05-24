@@ -32,7 +32,7 @@ class CryptoHarness(BaseHarness):
     async def _run_all_tickers(self):
         for ticker_raw in CRYPTO_TICKERS:
             try:
-                klines = self.broker.get_ohlcv(ticker_raw, interval="15m", limit=60)
+                klines = self.broker.get_ohlcv(ticker_raw, interval="15m", limit=100)
                 ticker_display = f"{ticker_raw[:3]}/{ticker_raw[3:]}"
                 await self.run_session(ticker_display, klines)
             except Exception:
