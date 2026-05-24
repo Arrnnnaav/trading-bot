@@ -50,7 +50,7 @@ class BaseHarness:
             for agent in self.agents
         ]
 
-        consensus = self.debate_engine.reach_consensus(votes)
+        consensus = self.debate_engine.reach_consensus(votes, ticker=ticker)
         direction = consensus["direction"]
         confidence = consensus["confidence"]
 

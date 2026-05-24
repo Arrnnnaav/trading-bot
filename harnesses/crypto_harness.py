@@ -19,6 +19,7 @@ class CryptoHarness(BaseHarness):
             ChronosTechnicalAgent(),
             NewsSentimentAgent(config.cryptopanic_api_key),
             OnChainAgent(config.coinglass_api_key),
+            MacroCryptoAgent(),
         ]
         super().__init__(
             state_path=config.crypto_progress_path,
