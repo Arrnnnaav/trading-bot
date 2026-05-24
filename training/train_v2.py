@@ -51,13 +51,17 @@ PHASE2_WARMUP_FRAC = 0.03
 
 
 def _compute_full_class_weights(dataset) -> torch.Tensor:
-    """Inverse-frequency weights, NO cap — let the imbalance drive the loss."""
+    """
+    Inverse-frequency weights, clipped to min=1.0.
+    HOLD can never go below 1 — prevents model ignoring 83% of data entirely.
+    LONG/SHORT get ~4× relative to HOLD=1 (no upper cap).
+    """
     labels = [dataset[i][1] for i in range(len(dataset))]
     counts = np.bincount(labels, minlength=3).astype(np.float32)
     total = counts.sum()
-    weights = total / (3 * counts + 1e-8)
+    weights = np.clip(total / (3 * counts + 1e-8), 1.0, None)  # min=1, no upper cap
     print(
-        f"  Class weights (uncapped): LONG={weights[0]:.2f}  SHORT={weights[1]:.2f}  HOLD={weights[2]:.2f}"
+        f"  Class weights (min-clipped): LONG={weights[0]:.2f}  SHORT={weights[1]:.2f}  HOLD={weights[2]:.2f}"
     )
     return torch.tensor(weights, dtype=torch.float32)
 
@@ -194,7 +198,8 @@ def main():
     # Temperature should be fixed in Phase 1 (only head learns)
     model.log_temperature.requires_grad = False
 
-    focal = FocalLoss(gamma=2.0, weight=class_weights.to(device))
+    # Phase 1: gamma=1.0 — mild focal so head finds balanced init before full fine-tune
+    focal_p1 = FocalLoss(gamma=1.0, weight=class_weights.to(device))
     trainable = [p for p in model.parameters() if p.requires_grad]
     optimizer = torch.optim.AdamW(trainable, lr=PHASE1_LR, weight_decay=1e-2)
 
@@ -212,7 +217,7 @@ def main():
 
     for epoch in range(1, PHASE1_EPOCHS + 1):
         train_loss = train_epoch(
-            model, train_loader, optimizer, scheduler, device, focal
+            model, train_loader, optimizer, scheduler, device, focal_p1
         )
         val_m = eval_epoch(model, val_loader, device)
         print(
@@ -251,11 +256,20 @@ def main():
         f"  Effective batch={PHASE2_BATCH * PHASE2_ACCUM}  LR warmup={warmup_steps_p2} steps"
     )
 
+    # Phase 2: gamma=2.0 — full focal power after head is stabilised
+    focal_p2 = FocalLoss(gamma=2.0, weight=class_weights.to(device))
+
     patience = 3
     no_improve = 0
     for epoch in range(1, PHASE2_EPOCHS + 1):
         train_loss = train_epoch(
-            model, train_loader_p2, optimizer, scheduler_p2, device, focal, PHASE2_ACCUM
+            model,
+            train_loader_p2,
+            optimizer,
+            scheduler_p2,
+            device,
+            focal_p2,
+            PHASE2_ACCUM,
         )
         val_m = eval_epoch(model, val_loader, device)
         T = model.log_temperature.exp().item()
