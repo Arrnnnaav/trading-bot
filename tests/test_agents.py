@@ -25,7 +25,6 @@ def test_chronos_agent_returns_agent_vote():
     mock_model.predict.return_value = (Direction.LONG, 0.72)
     mock_model.eval = MagicMock()
 
-
     logits = torch.tensor([[2.0, -1.0, 0.5]])
     mock_model.return_value = logits
     agent.model = mock_model
@@ -55,11 +54,15 @@ def test_chronos_agent_hold_on_low_confidence():
     assert vote.confidence == 0.0
 
 
-def test_chronos_agent_fails_loudly_if_model_missing(tmp_path):
-    from agents.chronos_technical import ChronosTechnicalAgent
+def test_chronos_agent_fails_loudly_if_model_missing(monkeypatch, tmp_path):
+    from agents import chronos_technical
 
-    with pytest.raises(FileNotFoundError, match="Train the model first"):
-        ChronosTechnicalAgent(model_path=str(tmp_path / "nonexistent.pt"))
+    # Point both model paths to non-existent locations
+    monkeypatch.setattr(chronos_technical, "MODEL_PATH_V2", str(tmp_path / "v2.pt"))
+    monkeypatch.setattr(chronos_technical, "MODEL_PATH_V1", str(tmp_path / "v1.pt"))
+
+    with pytest.raises(FileNotFoundError, match="Train first"):
+        chronos_technical.ChronosTechnicalAgent()
 
 
 def test_chronos_agent_needs_96_candles():
