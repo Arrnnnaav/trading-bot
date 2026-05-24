@@ -1,4 +1,6 @@
+import json
 import httpx
+from pathlib import Path
 from agents.base import BaseAgent
 from core.models import AgentVote, Direction, Market
 
@@ -9,6 +11,14 @@ class NewsSentimentAgent(BaseAgent):
 
     def __init__(self, api_key: str):
         self.api_key = api_key
+        thresholds = self._load_thresholds()
+        self._sentiment_threshold = thresholds.get("news_sentiment_threshold", 0.2)
+
+    def _load_thresholds(self) -> dict:
+        try:
+            return json.loads(Path("data/calibrated_thresholds.json").read_text())
+        except (FileNotFoundError, Exception):
+            return {}
 
     def _fetch_news(self, ticker: str) -> list[dict]:
         currency = ticker.split("/")[0]
@@ -52,9 +62,9 @@ class NewsSentimentAgent(BaseAgent):
                 reasoning="News fetch failed",
             )
 
-        if score > 0.2:
+        if score > self._sentiment_threshold:
             direction, confidence = Direction.LONG, min(0.5 + score, 0.85)
-        elif score < -0.2:
+        elif score < -self._sentiment_threshold:
             direction, confidence = Direction.SHORT, min(0.5 + abs(score), 0.85)
         else:
             direction, confidence = Direction.HOLD, 0.0
