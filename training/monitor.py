@@ -88,6 +88,17 @@ def diagnose(epochs: list) -> list[str]:
     if last["short_f1"] is not None and last["short_f1"] < 0.05:
         issues.append(f"SHORT F1={last['short_f1']:.3f} — SHORT class not learned.")
 
+    # --- Loss/F1 divergence (HOLD collapse indicator) ---
+    if len(epochs) >= 2:
+        f1_delta = epochs[-1]["macro_f1"] - epochs[-2]["macro_f1"]
+        loss_delta = epochs[-1]["val_loss"] - epochs[-2]["val_loss"]
+        if loss_delta < -0.005 and f1_delta < -0.001:
+            issues.append(
+                f"HOLD COLLAPSE SIGNAL: val_loss improving ({loss_delta:+.4f}) but macro_f1 dropping "
+                f"({f1_delta:+.4f}). Model learning confident HOLD predictions. "
+                "Fix: focal loss (v2) or stronger class weights."
+            )
+
     # --- Overfitting ---
     if len(epochs) >= 3:
         val_trend = val_losses[-1] - val_losses[-3]
