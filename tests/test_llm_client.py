@@ -53,6 +53,7 @@ async def test_call_returns_empty_on_timeout():
         result = await client.call("test prompt", timeout=0.01)
 
     assert result == ""
+    mock_proc.kill.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -102,3 +103,25 @@ async def test_system_prompt_passed_as_flag():
 
     assert "--system-prompt" in captured_args
     assert "you are a trader" in captured_args
+
+
+@pytest.mark.asyncio
+async def test_no_system_prompt_when_empty():
+    from core.llm_client import ClaudeCodeClient
+
+    client = ClaudeCodeClient()
+
+    mock_proc = MagicMock()
+    mock_proc.communicate = AsyncMock(return_value=(b"result", b""))
+    mock_proc.returncode = 0
+
+    captured_args = []
+
+    async def capture(*args, **kwargs):
+        captured_args.extend(args)
+        return mock_proc
+
+    with patch("asyncio.create_subprocess_exec", capture):
+        await client.call("my prompt")  # no system arg
+
+    assert "--system-prompt" not in captured_args

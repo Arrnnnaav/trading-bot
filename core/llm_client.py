@@ -1,4 +1,7 @@
 import asyncio
+import logging
+
+_LOG = logging.getLogger(__name__)
 
 
 class ClaudeCodeClient:
@@ -16,8 +19,6 @@ class ClaudeCodeClient:
             "claude",
             "-p",
             prompt,
-            "--output-format",
-            "text",
             "--model",
             model,
             "--bare",
@@ -25,6 +26,7 @@ class ClaudeCodeClient:
         if system:
             args += ["--system-prompt", system]
 
+        proc = None
         async with self._sem:
             try:
                 proc = await asyncio.create_subprocess_exec(
@@ -32,13 +34,21 @@ class ClaudeCodeClient:
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                 )
-                stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+                stdout, stderr = await asyncio.wait_for(
+                    proc.communicate(), timeout=timeout
+                )
                 if proc.returncode != 0:
+                    _LOG.warning(
+                        "claude exited %d: %s",
+                        proc.returncode,
+                        stderr.decode("utf-8", errors="replace")[:200],
+                    )
                     return ""
-                return stdout.decode().strip()
+                return stdout.decode("utf-8").strip()
             except (asyncio.TimeoutError, Exception):
-                try:
-                    proc.kill()
-                except Exception:
-                    pass
+                if proc is not None:
+                    try:
+                        proc.kill()
+                    except Exception:
+                        pass
                 return ""
