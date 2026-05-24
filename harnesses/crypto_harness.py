@@ -1,7 +1,7 @@
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from harnesses.base_harness import BaseHarness
 from core.models import Market
-from agents.kronos_technical import KronosTechnicalAgent
+from agents.chronos_technical import ChronosTechnicalAgent
 from agents.news_sentiment import NewsSentimentAgent
 from agents.onchain import OnChainAgent
 from brokers.coindcx import CoinDCXBroker
@@ -16,7 +16,7 @@ class CryptoHarness(BaseHarness):
     def __init__(self, telegram_bot, signal_aggregator):
         broker = CoinDCXBroker(config.coindcx_api_key, config.coindcx_api_secret)
         agents = [
-            KronosTechnicalAgent(),
+            ChronosTechnicalAgent(),
             NewsSentimentAgent(config.cryptopanic_api_key),
             OnChainAgent(config.coinglass_api_key),
         ]

@@ -3,7 +3,6 @@ from apscheduler.triggers.cron import CronTrigger
 import pytz
 from harnesses.base_harness import BaseHarness
 from core.models import Market
-from agents.kronos_technical import KronosTechnicalAgent
 from agents.fundamentals import FundamentalsAgent
 from agents.fii_dii import FIIDIIAgent
 from agents.options_oi import OptionsOIAgent
@@ -29,7 +28,6 @@ class IndiaHarness(BaseHarness):
     def __init__(self, telegram_bot, signal_aggregator):
         broker = UpstoxBroker(config.upstox_api_key, config.upstox_access_token)
         agents = [
-            KronosTechnicalAgent(),
             FundamentalsAgent(),
             FIIDIIAgent(),
             OptionsOIAgent(broker),
