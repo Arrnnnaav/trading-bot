@@ -22,6 +22,11 @@ from dashboard.server import app as dashboard_app
 def build_components():
     """Instantiate and wire all components. Returns (crypto_harness, india_harness, telegram_bot, aggregator)."""
 
+    # Run threshold calibration on startup (uses defaults if insufficient signal history)
+    from training.calibrate_thresholds import calibrate
+
+    calibrate()
+
     # Shared signal aggregator
     aggregator = SignalAggregator(signal_log_path=config.signal_log_path)
 
