@@ -2,9 +2,12 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from harnesses.base_harness import BaseHarness
 from core.models import Market
 from agents.chronos_technical import ChronosTechnicalAgent
+from agents.xgb_technical import XGBTechnicalAgent
 from agents.news_sentiment import NewsSentimentAgent
 from agents.onchain import OnChainAgent
+from agents.macro_crypto import MacroCryptoAgent
 from brokers.coindcx import CoinDCXBroker
+from brokers.paper_broker import PaperBroker
 from config import config
 
 CRYPTO_TICKERS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT"]
@@ -14,10 +17,16 @@ class CryptoHarness(BaseHarness):
     MARKET = Market.CRYPTO
 
     def __init__(self, telegram_bot, signal_aggregator):
-        broker = CoinDCXBroker(config.coindcx_api_key, config.coindcx_api_secret)
+        real_broker = CoinDCXBroker(config.coindcx_api_key, config.coindcx_api_secret)
+        broker = (
+            PaperBroker(real_broker, config.paper_trades_path)
+            if config.paper_trading
+            else real_broker
+        )
         agents = [
             ChronosTechnicalAgent(),
-            NewsSentimentAgent(config.cryptopanic_api_key),
+            XGBTechnicalAgent(),
+            NewsSentimentAgent(),
             OnChainAgent(config.coinglass_api_key),
             MacroCryptoAgent(),
         ]
