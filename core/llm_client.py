@@ -15,13 +15,17 @@ class ClaudeCodeClient:
         model: str = "claude-haiku-4-5-20251001",
         timeout: float = 30.0,
     ) -> str:
+        # --bare disables OAuth/keychain (requires ANTHROPIC_API_KEY), so we omit it.
+        # --dangerously-skip-permissions: no interactive tool prompts in subprocess.
+        # --no-session-persistence: don't write session files for each call.
         args = [
             "claude",
             "-p",
             prompt,
             "--model",
             model,
-            "--bare",
+            "--dangerously-skip-permissions",
+            "--no-session-persistence",
         ]
         if system:
             args += ["--system-prompt", system]

@@ -50,5 +50,12 @@ class CryptoHarness(BaseHarness):
         await self.update_learnings()
 
     def start(self):
-        self.scheduler.add_job(self._run_all_tickers, "interval", minutes=15)
+        from datetime import datetime, timezone
+
+        self.scheduler.add_job(
+            self._run_all_tickers,
+            "interval",
+            minutes=15,
+            next_run_time=datetime.now(timezone.utc),  # fire immediately on start
+        )
         self.scheduler.start()
