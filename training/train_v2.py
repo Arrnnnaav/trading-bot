@@ -19,7 +19,7 @@ import math
 import torch
 import torch.nn as nn
 import numpy as np
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, WeightedRandomSampler
 from sklearn.metrics import f1_score, confusion_matrix
 from pathlib import Path
 from tqdm import tqdm
@@ -198,13 +198,23 @@ def main():
     # Temperature should be fixed in Phase 1 (only head learns)
     model.log_temperature.requires_grad = False
 
-    # Phase 1: gamma=1.0 — mild focal so head finds balanced init before full fine-tune
-    focal_p1 = FocalLoss(gamma=1.0, weight=class_weights.to(device))
+    # Phase 1: gamma=1.5 — stronger focal + balanced sampler to prevent HOLD collapse
+    focal_p1 = FocalLoss(gamma=1.5, weight=class_weights.to(device))
     trainable = [p for p in model.parameters() if p.requires_grad]
     optimizer = torch.optim.AdamW(trainable, lr=PHASE1_LR, weight_decay=1e-2)
 
+    # Balanced sampler: each class drawn equally regardless of imbalance
+    p1_labels = [train_ds[i][1] for i in range(len(train_ds))]
+    p1_counts = np.bincount(p1_labels, minlength=3).astype(np.float64)
+    p1_class_w = 1.0 / (p1_counts + 1e-8)
+    p1_sample_w = torch.tensor([p1_class_w[l] for l in p1_labels], dtype=torch.float32)
+    p1_sampler = WeightedRandomSampler(
+        p1_sample_w, num_samples=len(p1_sample_w), replacement=True
+    )
+    print(f"  Balanced sampler: {p1_counts.astype(int)} → equal draw per class")
+
     train_loader = DataLoader(
-        train_ds, batch_size=PHASE1_BATCH, shuffle=True, num_workers=2
+        train_ds, batch_size=PHASE1_BATCH, sampler=p1_sampler, num_workers=2
     )
     val_loader = DataLoader(
         val_ds, batch_size=PHASE1_BATCH, shuffle=False, num_workers=2
