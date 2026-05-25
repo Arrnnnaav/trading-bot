@@ -1,4 +1,5 @@
-from unittest.mock import patch
+import pytest
+from unittest.mock import AsyncMock, patch
 from core.debate_engine import DebateEngine
 from core.models import AgentVote, Direction
 
@@ -14,15 +15,18 @@ def _mock_debate(direction, confidence):
     return patch.object(
         DebateEngine,
         "_adversarial_debate",
-        return_value={
-            "direction": direction,
-            "confidence": confidence,
-            "transcript": "mocked debate",
-        },
+        new=AsyncMock(
+            return_value={
+                "direction": direction,
+                "confidence": confidence,
+                "transcript": "mocked debate",
+            }
+        ),
     )
 
 
-def test_consensus_long_majority():
+@pytest.mark.asyncio
+async def test_consensus_long_majority():
     engine = DebateEngine()
     votes = [
         make_vote(Direction.LONG, 0.80, "A"),
@@ -30,34 +34,37 @@ def test_consensus_long_majority():
         make_vote(Direction.SHORT, 0.60, "C"),
     ]
     with _mock_debate(Direction.LONG, 0.75):
-        result = engine.reach_consensus(votes, ticker="BTC/USDT")
+        result = await engine.reach_consensus(votes, ticker="BTC/USDT")
     assert result["direction"] == Direction.LONG
     assert result["confidence"] >= 0.65
 
 
-def test_no_consensus_below_threshold():
+@pytest.mark.asyncio
+async def test_no_consensus_below_threshold():
     engine = DebateEngine()
     votes = [
         make_vote(Direction.LONG, 0.55, "A"),
         make_vote(Direction.SHORT, 0.55, "B"),
         make_vote(Direction.HOLD, 0.0, "C"),
     ]
-    result = engine.reach_consensus(votes, ticker="BTC/USDT")
+    result = await engine.reach_consensus(votes, ticker="BTC/USDT")
     assert result["direction"] == Direction.HOLD
     assert result["confidence"] < 0.65
 
 
-def test_consensus_requires_two_agreeing():
+@pytest.mark.asyncio
+async def test_consensus_requires_two_agreeing():
     engine = DebateEngine()
     votes = [
         make_vote(Direction.LONG, 0.90, "A"),
         make_vote(Direction.SHORT, 0.80, "B"),
     ]
-    result = engine.reach_consensus(votes, ticker="BTC/USDT")
+    result = await engine.reach_consensus(votes, ticker="BTC/USDT")
     assert result["direction"] == Direction.HOLD
 
 
-def test_adjudicator_can_override_to_hold():
+@pytest.mark.asyncio
+async def test_adjudicator_can_override_to_hold():
     """Opus adjudicator returning HOLD should override initial LONG consensus."""
     engine = DebateEngine()
     votes = [
@@ -65,7 +72,7 @@ def test_adjudicator_can_override_to_hold():
         make_vote(Direction.LONG, 0.75, "B"),
     ]
     with _mock_debate(Direction.HOLD, 0.0):
-        result = engine.reach_consensus(votes, ticker="ETH/USDT")
+        result = await engine.reach_consensus(votes, ticker="ETH/USDT")
     assert result["direction"] == Direction.HOLD
 
 

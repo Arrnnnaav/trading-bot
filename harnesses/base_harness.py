@@ -1,11 +1,14 @@
 import json
 import uuid
 from datetime import datetime, timezone
-from anthropic import Anthropic
+from pathlib import Path
+from core.llm_client import ClaudeCodeClient
 from core.models import HarnessState, Direction
 from core.debate_engine import DebateEngine
 from core.risk_manager import RiskManager
 from core.signal_aggregator import SignalAggregator
+from core.agent_tracker import AgentPerformanceTracker
+from core.pattern_reputation import PatternReputationTracker
 from config import config
 
 
@@ -27,7 +30,12 @@ class BaseHarness:
         self.aggregator = signal_aggregator
         self.state = self._load_state()
         self.debate_engine = DebateEngine(learnings=self.state.agent_learnings)
-        self.risk_manager = RiskManager(self.MARKET)
+        self._agent_tracker = AgentPerformanceTracker(config.signal_log_path)
+        self._pattern_reputation = PatternReputationTracker(config.signal_log_path)
+        self._llm_client = ClaudeCodeClient()
+        self.risk_manager = RiskManager(
+            self.MARKET, pattern_reputation=self._pattern_reputation
+        )
 
     def _load_state(self) -> HarnessState:
         try:
@@ -45,12 +53,18 @@ class BaseHarness:
         return f"sig_{ts}_{uuid.uuid4().hex[:6]}"
 
     async def run_session(self, ticker: str, klines: list[dict], **agent_kwargs):
+        self._agent_tracker.refresh()
+        self._pattern_reputation.refresh()
+        agent_weights = self._agent_tracker.get_weights()
+
         votes = [
             agent.analyze(ticker, klines, self.MARKET, **agent_kwargs)
             for agent in self.agents
         ]
 
-        consensus = self.debate_engine.reach_consensus(votes, ticker=ticker)
+        consensus = await self.debate_engine.reach_consensus(
+            votes, ticker=ticker, agent_weights=agent_weights
+        )
         direction = consensus["direction"]
         confidence = consensus["confidence"]
 
@@ -58,13 +72,15 @@ class BaseHarness:
             return None
 
         approved, reason = self.risk_manager.approve(
-            self.state, ticker, direction, confidence, klines
+            self.state, ticker, direction, confidence, klines, votes=votes
         )
         if not approved:
             return None
 
         signal_id = self._make_signal_id()
-        reasoning = self.debate_engine.generate_reasoning(votes, direction, ticker)
+        reasoning = await self.debate_engine.generate_reasoning(
+            votes, direction, ticker
+        )
         signal = self.risk_manager.build_signal(
             signal_id,
             ticker,
@@ -88,7 +104,7 @@ class BaseHarness:
         await self.telegram_bot.send_signal(signal)
         return signal
 
-    def update_learnings(self):
+    async def update_learnings(self):
         if self.state.session_count % 10 != 0:
             return
         recent_ids = self.state.signal_history[-50:]
@@ -97,26 +113,34 @@ class BaseHarness:
         if not outcomes:
             return
 
-        client = Anthropic(api_key=config.anthropic_api_key)
-        summary_prompt = f"""Analyze these {len(outcomes)} trading signal outcomes:
-{json.dumps([{"ticker": o["ticker"], "direction": o["direction"], "outcome": o["outcome"], "pnl_pct": o.get("hypothetical_pnl_pct")} for o in outcomes], indent=2)}
-
-Write 3 concise sentences about: (1) which setups worked, (2) which failed, (3) one rule to apply next session."""
-
-        resp = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=200,
-            messages=[{"role": "user", "content": summary_prompt}],
+        summary_prompt = (
+            f"Analyze these {len(outcomes)} trading signal outcomes:\n"
+            + json.dumps(
+                [
+                    {
+                        "ticker": o["ticker"],
+                        "direction": o["direction"],
+                        "outcome": o["outcome"],
+                        "pnl_pct": o.get("hypothetical_pnl_pct"),
+                    }
+                    for o in outcomes
+                ],
+                indent=2,
+            )
+            + "\n\nWrite 3 concise sentences about: (1) which setups worked, "
+            "(2) which failed, (3) one rule to apply next session."
         )
-        learnings = resp.content[0].text.strip()
+
+        learnings = await self._llm_client.call(
+            prompt=summary_prompt,
+            model="claude-haiku-4-5-20251001",
+        )
+        if not learnings:
+            return
+
         self.state.agent_learnings = learnings
         self._save_state()
-
-        # Route learnings to DebateEngine (where LLM actually runs)
         self.debate_engine.update_learnings(learnings)
-
-        # Write human-readable log
-        from pathlib import Path
 
         log_path = Path("data") / f"{self.MARKET.value}_learnings.md"
         log_path.parent.mkdir(exist_ok=True)

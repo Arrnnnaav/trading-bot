@@ -15,9 +15,6 @@ class Config:
     upstox_api_key: str = os.environ.get("UPSTOX_API_KEY", "")
     upstox_access_token: str = os.environ.get("UPSTOX_ACCESS_TOKEN", "")
 
-    # Claude API
-    anthropic_api_key: str = os.environ.get("ANTHROPIC_API_KEY", "")
-
     # Data APIs
     coinglass_api_key: str = os.environ.get("COINGLASS_API_KEY", "")
 

@@ -47,7 +47,7 @@ class CryptoHarness(BaseHarness):
                 await self.run_session(ticker_display, klines)
             except Exception:
                 continue
-        self.update_learnings()
+        await self.update_learnings()
 
     def start(self):
         self.scheduler.add_job(self._run_all_tickers, "interval", minutes=15)

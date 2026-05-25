@@ -4,21 +4,22 @@ DebateEngine — multi-agent vote consensus + adversarial bull/bear debate.
 Flow:
   1. reach_consensus(votes, ticker) — vote counting + threshold check
   2. If direction != HOLD: _adversarial_debate() runs
-     a. Bull researcher (haiku)  — argues FOR the trade
-     b. Bear researcher (haiku)  — argues AGAINST the trade
+     a. Bull researcher (haiku)  — argues FOR the trade  } parallel via asyncio.gather
+     b. Bear researcher (haiku)  — argues AGAINST the trade }
      c. Opus adjudicator         — makes final LONG/SHORT/HOLD + confidence
   3. generate_reasoning()        — Telegram-facing 2-sentence rationale (haiku)
 """
 
+import asyncio
 import re
-from anthropic import Anthropic
+from core.llm_client import ClaudeCodeClient
 from core.models import AgentVote, Direction
 from config import config
 
 
 class DebateEngine:
     def __init__(self, learnings: str = ""):
-        self.client = Anthropic(api_key=config.anthropic_api_key)
+        self._client = ClaudeCodeClient()
         self.learnings = learnings
 
     def update_learnings(self, learnings: str):
@@ -26,7 +27,12 @@ class DebateEngine:
 
     # ── Public API ────────────────────────────────────────────────────────────
 
-    def reach_consensus(self, votes: list[AgentVote], ticker: str = "") -> dict:
+    async def reach_consensus(
+        self,
+        votes: list[AgentVote],
+        ticker: str = "",
+        agent_weights: dict[str, float] | None = None,
+    ) -> dict:
         if not votes:
             return {
                 "direction": Direction.HOLD,
@@ -51,7 +57,13 @@ class DebateEngine:
                 "transcript": self._build_transcript(votes),
             }
 
-        confidence = sum(v.confidence for v in agreeing) / len(agreeing)
+        if agent_weights:
+            weights = [agent_weights.get(v.agent_name, 1.0) for v in agreeing]
+            confidence = sum(w * v.confidence for w, v in zip(weights, agreeing)) / sum(
+                weights
+            )
+        else:
+            confidence = sum(v.confidence for v in agreeing) / len(agreeing)
         if confidence < config.min_confidence:
             return {
                 "direction": Direction.HOLD,
@@ -59,30 +71,28 @@ class DebateEngine:
                 "transcript": self._build_transcript(votes),
             }
 
-        # Adversarial debate — may override direction or confidence
-        return self._adversarial_debate(votes, ticker, direction, round(confidence, 3))
+        return await self._adversarial_debate(
+            votes, ticker, direction, round(confidence, 3)
+        )
 
-    def generate_reasoning(
+    async def generate_reasoning(
         self, votes: list[AgentVote], direction: Direction, ticker: str
     ) -> str:
         transcript = self._build_transcript(votes)
-        resp = self.client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=150,
-            system=self._build_system_prompt(),
-            messages=[
-                {
-                    "role": "user",
-                    "content": f"Agent debate for {ticker}:\n{transcript}\n\nConsensus: {direction.value}\n"
-                    "Write a 2-sentence trading rationale. Be specific about key signals.",
-                }
-            ],
+        prompt = (
+            f"Agent debate for {ticker}:\n{transcript}\n\nConsensus: {direction.value}\n"
+            "Write a 2-sentence trading rationale. Be specific about key signals."
         )
-        return resp.content[0].text.strip()
+        result = await self._client.call(
+            prompt=prompt,
+            system=self._build_system_prompt(),
+            model="claude-haiku-4-5-20251001",
+        )
+        return result or "Signal generated from multi-agent consensus."
 
     # ── Adversarial debate ────────────────────────────────────────────────────
 
-    def _adversarial_debate(
+    async def _adversarial_debate(
         self,
         votes: list[AgentVote],
         ticker: str,
@@ -90,9 +100,11 @@ class DebateEngine:
         initial_confidence: float,
     ) -> dict:
         transcript = self._build_transcript(votes)
-        bull_arg = self._run_researcher("bull", transcript, ticker, initial_direction)
-        bear_arg = self._run_researcher("bear", transcript, ticker, initial_direction)
-        return self._adjudicate(
+        bull_arg, bear_arg = await asyncio.gather(
+            self._run_researcher("bull", transcript, ticker, initial_direction),
+            self._run_researcher("bear", transcript, ticker, initial_direction),
+        )
+        return await self._adjudicate(
             bull_arg,
             bear_arg,
             transcript,
@@ -101,26 +113,22 @@ class DebateEngine:
             initial_confidence,
         )
 
-    def _run_researcher(
+    async def _run_researcher(
         self, role: str, transcript: str, ticker: str, direction: Direction
     ) -> str:
         stance = "FOR" if role == "bull" else "AGAINST"
-        resp = self.client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=120,
-            system=self._build_system_prompt(),
-            messages=[
-                {
-                    "role": "user",
-                    "content": f"You are a {role}ish researcher. Make the strongest 2-sentence case "
-                    f"{stance} a {direction.value} trade on {ticker}.\n\n"
-                    f"Agent signals:\n{transcript}\n\nBe specific, not generic.",
-                }
-            ],
+        prompt = (
+            f"You are a {role}ish researcher. Make the strongest 2-sentence case "
+            f"{stance} a {direction.value} trade on {ticker}.\n\n"
+            f"Agent signals:\n{transcript}\n\nBe specific, not generic."
         )
-        return resp.content[0].text.strip()
+        return await self._client.call(
+            prompt=prompt,
+            system=self._build_system_prompt(),
+            model="claude-haiku-4-5-20251001",
+        )
 
-    def _adjudicate(
+    async def _adjudicate(
         self,
         bull_arg: str,
         bear_arg: str,
@@ -140,13 +148,11 @@ class DebateEngine:
             "CONFIDENCE: 0.50-0.95\n"
             "REASON: one sentence"
         )
-        resp = self.client.messages.create(
-            model="claude-opus-4-7",
-            max_tokens=80,
+        text = await self._client.call(
+            prompt=prompt,
             system=self._build_system_prompt(),
-            messages=[{"role": "user", "content": prompt}],
+            model="claude-opus-4-7",
         )
-        text = resp.content[0].text.strip()
         direction, confidence = self._parse_adjudication(
             text, initial_direction, initial_confidence
         )
