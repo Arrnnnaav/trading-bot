@@ -1,18 +1,21 @@
 """
-ChronosClassifierV2 — attention pooling + temperature scaling.
+ChronosClassifierV2 — attention pooling + extra stat features + temperature scaling.
 Drop-in replacement for ChronosClassifier; save format uses same keys
 so agents/chronos_technical.py load() still works.
+
+n_extra=6: momentum/vol stat features fused into head after encoder pooling.
+Set n_extra=0 for old-style model (backward compat with checkpoints trained without extras).
 """
 
 import torch
 import torch.nn as nn
 from pathlib import Path
-from typing import Tuple
+from typing import Tuple, Optional
 
 from chronos import ChronosPipeline
 
 from core.models import Direction
-from training.dataset import LABEL_NAMES
+from training.dataset import LABEL_NAMES, N_STAT_FEATURES
 
 CHECKPOINT_DEFAULT = "amazon/chronos-t5-small"
 D_MODEL = 512
@@ -36,14 +39,20 @@ class _AttentionPool(nn.Module):
 
 class ChronosClassifierV2(nn.Module):
     """
-    Chronos-2 encoder + attention pooling + 3-class head + temperature.
-    Improvements over V1:
-      - Attention pooling (vs. masked mean)
-      - Deeper head with residual skip
-      - Temperature scaling for calibrated confidence
+    Chronos-2 encoder + attention pooling + optional stat feature fusion + 3-class head + temperature.
+
+    Extra features (n_extra=6 by default):
+      ret_1, ret_5, ret_20 — price momentum at 3 horizons
+      vol_5, vol_20        — short/medium volatility
+      vol_ratio            — vol expansion indicator (vol_5 / vol_20)
+
+    These are concatenated to the pooled encoder output before the MLP head,
+    giving the model explicit directional signals alongside the learned representation.
     """
 
-    def __init__(self, checkpoint: str = CHECKPOINT_DEFAULT):
+    def __init__(
+        self, checkpoint: str = CHECKPOINT_DEFAULT, n_extra: int = N_STAT_FEATURES
+    ):
         super().__init__()
         pipeline = ChronosPipeline.from_pretrained(
             checkpoint, device_map="cpu", torch_dtype=torch.float32
@@ -51,20 +60,23 @@ class ChronosClassifierV2(nn.Module):
         self.tokenizer = pipeline.tokenizer
         self.encoder = pipeline.model.model.encoder
         self._checkpoint = checkpoint
+        self._n_extra = n_extra
 
         self.pool = _AttentionPool(D_MODEL)
 
+        head_in = D_MODEL + n_extra  # 518 with extras, 512 without
+
         # Head: LayerNorm → skip-connected MLP → classifier
-        self.norm = nn.LayerNorm(D_MODEL)
+        self.norm = nn.LayerNorm(head_in)
         self.proj = nn.Sequential(
-            nn.Linear(D_MODEL, 256),
+            nn.Linear(head_in, 256),
             nn.GELU(),
-            nn.Dropout(0.1),
+            nn.Dropout(0.15),
             nn.Linear(256, 128),
             nn.GELU(),
         )
-        self.skip = nn.Linear(D_MODEL, 128, bias=False)
-        self.drop = nn.Dropout(0.2)
+        self.skip = nn.Linear(head_in, 128, bias=False)
+        self.drop = nn.Dropout(0.25)
         self.classifier = nn.Linear(128, 3)
 
         # Learnable temperature (log scale so always positive)
@@ -78,8 +90,14 @@ class ChronosClassifierV2(nn.Module):
         for p in self.encoder.parameters():
             p.requires_grad = True
 
-    def forward(self, close: torch.Tensor) -> torch.Tensor:
-        """close: [B, seq_len] — z-score normalised. Returns logits [B, 3]."""
+    def forward(
+        self, close: torch.Tensor, extra: Optional[torch.Tensor] = None
+    ) -> torch.Tensor:
+        """
+        close: [B, seq_len] — z-score normalised.
+        extra: [B, n_extra] — stat features (optional, but required if n_extra > 0).
+        Returns logits [B, 3].
+        """
         device = close.device
         token_ids, attention_mask, _ = self.tokenizer.context_input_transform(
             close.cpu()
@@ -91,22 +109,30 @@ class ChronosClassifierV2(nn.Module):
         hidden = enc_out.last_hidden_state  # [B, seq, D]
 
         pooled = self.pool(hidden, attention_mask)  # [B, D]
-        normed = self.norm(pooled)
 
+        if self._n_extra > 0 and extra is not None:
+            pooled = torch.cat([pooled, extra.to(device)], dim=-1)  # [B, D + n_extra]
+
+        normed = self.norm(pooled)
         h = self.proj(normed)
         h = h + self.skip(normed)  # residual
         h = self.drop(h)
         logits = self.classifier(h)  # [B, 3]
 
-        # Temperature scaling (divide by T; T = exp(log_T) ≥ 0)
         T = self.log_temperature.exp().clamp(min=0.1)
         return logits / T
 
-    def predict(self, close: torch.Tensor) -> Tuple[Direction, float]:
-        """close: [seq_len] single sample, z-score normalised."""
+    def predict(
+        self, close: torch.Tensor, extra: Optional[torch.Tensor] = None
+    ) -> Tuple[Direction, float]:
+        """
+        close: [seq_len] single sample, z-score normalised.
+        extra: [n_extra] stat features for this sample (1-D, not batched).
+        """
         self.eval()
         with torch.no_grad():
-            logits = self.forward(close.unsqueeze(0))
+            extra_batch = extra.unsqueeze(0) if extra is not None else None
+            logits = self.forward(close.unsqueeze(0), extra=extra_batch)
             probs = torch.softmax(logits, dim=-1).squeeze(0)
             confidence = probs.max().item()
             label_idx = probs.argmax().item()
@@ -119,6 +145,7 @@ class ChronosClassifierV2(nn.Module):
         torch.save(
             {
                 "version": "v2",
+                "n_extra": self._n_extra,
                 "encoder_state": self.encoder.state_dict(),
                 "head_state": {
                     "pool": self.pool.state_dict(),
@@ -140,7 +167,10 @@ class ChronosClassifierV2(nn.Module):
     ) -> "ChronosClassifierV2":
         state = torch.load(path, map_location="cpu", weights_only=False)
         ckpt = state.get("checkpoint", checkpoint)
-        model = cls(ckpt)
+        n_extra = state.get(
+            "n_extra", 0
+        )  # backward compat: old checkpoints had no extra
+        model = cls(ckpt, n_extra=n_extra)
         model.encoder.load_state_dict(state["encoder_state"])
         hs = state["head_state"]
         model.pool.load_state_dict(hs["pool"])

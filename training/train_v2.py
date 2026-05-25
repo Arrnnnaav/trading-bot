@@ -1,15 +1,23 @@
 """
 train_v2.py — improved training for ChronosClassifierV2.
 
-Improvements over train.py (v1):
-  - Focal loss (gamma=2) instead of weighted CE — handles HOLD dominance better
-  - Class weights uncapped (no 5x clip) — full inverse-frequency
+Improvements over v1 train.py:
+  - Focal loss (gamma=2) instead of weighted CE
+  - Class weights uncapped (no 5x clip)
   - Attention pooling model (ChronosClassifierV2)
-  - Per-class F1 logging (LONG / SHORT / HOLD) — detects HOLD collapse
-  - LR warmup (linear 3% steps) for both phases
+  - Per-class F1 logging (LONG / SHORT / HOLD)
+  - LR warmup (linear) + cosine decay for both phases
   - Gradient accumulation (Phase 2 effective batch = 128)
   - Temperature is jointly learned during Phase 2
   - Saves to models/chronos_crypto_v2/best.pt
+
+v3 training improvements:
+  - Extra stat features (ret_1/5/20, vol_5/20, vol_ratio) fused at head
+  - Phase 2 now uses 2:2:1 balanced sampler instead of pure shuffle
+    (prevents HOLD domination since focal alone doesn't fully compensate)
+  - Phase 1: 3→5 epochs (head needs more convergence before encoder unfreezes)
+  - Phase 2: 4→8 epochs, patience 3→5
+  - Dropout: 0.1/0.2→0.15/0.25 (see model_v2.py)
 
 Run: python -m training.train_v2
 """
@@ -31,35 +39,33 @@ from training.dataset import (
     load_all_tickers,
     split_datasets,
     LABEL_NAMES,
+    N_STAT_FEATURES,
 )
 
 MODEL_DIR = Path("models/chronos_crypto_v2")
 CHECKPOINT = "amazon/chronos-t5-small"
 
-# Phase 1: frozen encoder, head only — focal loss, warmup
-PHASE1_EPOCHS = 3  # extra epoch since focal harder to fit initially
+# Phase 1: frozen encoder, head only
+PHASE1_EPOCHS = 5
 PHASE1_LR = 8e-4
 PHASE1_BATCH = 64
-PHASE1_WARMUP_FRAC = 0.05  # 5% steps linear warmup
+PHASE1_WARMUP_FRAC = 0.05
 
-# Phase 2: full fine-tune — cosine LR + gradient accumulation
-PHASE2_EPOCHS = 4
+# Phase 2: full fine-tune
+PHASE2_EPOCHS = 8
 PHASE2_LR = 8e-6
 PHASE2_BATCH = 32
-PHASE2_ACCUM = 4  # effective batch = 32 * 4 = 128
+PHASE2_ACCUM = 4  # effective batch = 128
 PHASE2_WARMUP_FRAC = 0.03
+PHASE2_PATIENCE = 5
 
 
 def _compute_full_class_weights(dataset) -> torch.Tensor:
-    """
-    Inverse-frequency weights, clipped to min=1.0.
-    HOLD can never go below 1 — prevents model ignoring 83% of data entirely.
-    LONG/SHORT get ~4× relative to HOLD=1 (no upper cap).
-    """
-    labels = [dataset[i][1] for i in range(len(dataset))]
+    """Inverse-frequency weights, clipped to min=1.0."""
+    labels = [dataset[i][2] for i in range(len(dataset))]
     counts = np.bincount(labels, minlength=3).astype(np.float32)
     total = counts.sum()
-    weights = np.clip(total / (3 * counts + 1e-8), 1.0, None)  # min=1, no upper cap
+    weights = np.clip(total / (3 * counts + 1e-8), 1.0, None)
     print(
         f"  Class weights (min-clipped): LONG={weights[0]:.2f}  SHORT={weights[1]:.2f}  HOLD={weights[2]:.2f}"
     )
@@ -76,6 +82,25 @@ def _warmup_scheduler(optimizer, total_steps: int, warmup_steps: int):
     return torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
 
 
+def _make_sampler(labels: list, target_ratios: np.ndarray) -> WeightedRandomSampler:
+    """
+    Weighted sampler that draws each class at `target_ratios` frequency.
+    target_ratios: [r_long, r_short, r_hold] — relative draw probability per class.
+    Example: [2, 2, 1] → LONG and SHORT drawn 2x more often than HOLD.
+    """
+    counts = np.bincount(labels, minlength=3).astype(np.float64)
+    target_probs = target_ratios / target_ratios.sum()
+    actual_probs = counts / counts.sum()
+    # Per-sample weight = target_prob / actual_prob (how much to up/down-sample)
+    class_weights = target_probs / (actual_probs + 1e-8)
+    sample_weights = torch.tensor(
+        [class_weights[l] for l in labels], dtype=torch.float32
+    )
+    return WeightedRandomSampler(
+        sample_weights, num_samples=len(sample_weights), replacement=True
+    )
+
+
 def train_epoch(
     model: ChronosClassifierV2,
     loader: DataLoader,
@@ -88,12 +113,13 @@ def train_epoch(
     model.train()
     total_loss = 0.0
     optimizer.zero_grad()
-    for step, (close_batch, label_batch) in enumerate(
+    for step, (close_batch, extra_batch, label_batch) in enumerate(
         tqdm(loader, leave=False, desc="train")
     ):
         close_batch = close_batch.to(device)
+        extra_batch = extra_batch.to(device)
         label_batch = label_batch.to(device)
-        logits = model(close_batch)
+        logits = model(close_batch, extra=extra_batch)
         loss = criterion(logits, label_batch) / accum_steps
         loss.backward()
         if (step + 1) % accum_steps == 0:
@@ -123,10 +149,13 @@ def eval_epoch(
     total_loss = 0.0
     all_preds, all_labels = [], []
     with torch.no_grad():
-        for close_batch, label_batch in tqdm(loader, leave=False, desc="eval"):
+        for close_batch, extra_batch, label_batch in tqdm(
+            loader, leave=False, desc="eval"
+        ):
             close_batch = close_batch.to(device)
+            extra_batch = extra_batch.to(device)
             label_batch = label_batch.to(device)
-            logits = model(close_batch)
+            logits = model(close_batch, extra=extra_batch)
             loss = criterion(logits, label_batch)
             total_loss += loss.item()
             preds = logits.argmax(dim=-1).cpu().tolist()
@@ -138,8 +167,6 @@ def eval_epoch(
         all_labels, all_preds, average=None, zero_division=0, labels=[0, 1, 2]
     )
     cm = confusion_matrix(all_labels, all_preds, labels=[0, 1, 2])
-
-    # Prediction distribution
     pred_dist = np.bincount(all_preds, minlength=3)
     pred_pct = pred_dist / len(all_preds) * 100
 
@@ -167,6 +194,7 @@ def _fmt_metrics(m: Dict) -> str:
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}")
+    print(f"Extra stat features: {N_STAT_FEATURES}")
 
     print("Loading data...")
     df = load_all_tickers()
@@ -181,37 +209,32 @@ def main():
                 "checkpoint": CHECKPOINT,
                 "version": "v2",
                 "window": 96,
+                "n_extra": N_STAT_FEATURES,
                 "label_names": LABEL_NAMES,
                 "confidence_threshold": 0.55,
-                "architecture": "attention_pool+residual_head+temperature",
+                "architecture": "attention_pool+stat_fusion+residual_head+temperature",
             },
             indent=2,
         )
     )
 
-    model = ChronosClassifierV2(CHECKPOINT).to(device)
+    model = ChronosClassifierV2(CHECKPOINT, n_extra=N_STAT_FEATURES).to(device)
     best_f1 = 0.0
 
     # ── Phase 1: head only ─────────────────────────────────────────────────
     print("\n=== Phase 1: head training (encoder frozen) ===")
     model.freeze_encoder()
-    # Temperature should be fixed in Phase 1 (only head learns)
     model.log_temperature.requires_grad = False
 
-    # Phase 1: gamma=1.5 — stronger focal + balanced sampler to prevent HOLD collapse
     focal_p1 = FocalLoss(gamma=1.5, weight=class_weights.to(device))
     trainable = [p for p in model.parameters() if p.requires_grad]
     optimizer = torch.optim.AdamW(trainable, lr=PHASE1_LR, weight_decay=1e-2)
 
-    # Balanced sampler: each class drawn equally regardless of imbalance
-    p1_labels = [train_ds[i][1] for i in range(len(train_ds))]
-    p1_counts = np.bincount(p1_labels, minlength=3).astype(np.float64)
-    p1_class_w = 1.0 / (p1_counts + 1e-8)
-    p1_sample_w = torch.tensor([p1_class_w[l] for l in p1_labels], dtype=torch.float32)
-    p1_sampler = WeightedRandomSampler(
-        p1_sample_w, num_samples=len(p1_sample_w), replacement=True
-    )
-    print(f"  Balanced sampler: {p1_counts.astype(int)} → equal draw per class")
+    # 1:1:1 balanced sampler for Phase 1
+    p1_labels = [train_ds[i][2] for i in range(len(train_ds))]
+    p1_sampler = _make_sampler(p1_labels, np.array([1.0, 1.0, 1.0]))
+    counts_str = np.bincount(p1_labels, minlength=3).astype(int)
+    print(f"  Phase 1 sampler: 1:1:1  raw counts={counts_str}")
 
     train_loader = DataLoader(
         train_ds, batch_size=PHASE1_BATCH, sampler=p1_sampler, num_workers=2
@@ -241,9 +264,8 @@ def main():
     # ── Phase 2: full fine-tune ────────────────────────────────────────────
     print("\n=== Phase 2: full fine-tune (encoder unfrozen) ===")
     model.unfreeze_encoder()
-    model.log_temperature.requires_grad = True  # learn temperature now
+    model.log_temperature.requires_grad = True
 
-    # Separate param groups: lower LR for encoder, higher for head+temp
     encoder_params = list(model.encoder.parameters())
     head_params = [
         p for p in model.parameters() if not any(p is ep for ep in encoder_params)
@@ -256,8 +278,13 @@ def main():
         weight_decay=1e-2,
     )
 
+    # Phase 2: 2:2:1 sampler — still upsamples LONG/SHORT but HOLD not starved
+    p2_labels = [train_ds[i][2] for i in range(len(train_ds))]
+    p2_sampler = _make_sampler(p2_labels, np.array([2.0, 2.0, 1.0]))
+    print("  Phase 2 sampler: 2:2:1 (LONG:SHORT:HOLD)")
+
     train_loader_p2 = DataLoader(
-        train_ds, batch_size=PHASE2_BATCH, shuffle=True, num_workers=2
+        train_ds, batch_size=PHASE2_BATCH, sampler=p2_sampler, num_workers=2
     )
     total_steps_p2 = PHASE2_EPOCHS * (len(train_loader_p2) // PHASE2_ACCUM)
     warmup_steps_p2 = int(total_steps_p2 * PHASE2_WARMUP_FRAC)
@@ -266,10 +293,8 @@ def main():
         f"  Effective batch={PHASE2_BATCH * PHASE2_ACCUM}  LR warmup={warmup_steps_p2} steps"
     )
 
-    # Phase 2: gamma=2.0 — full focal power after head is stabilised
     focal_p2 = FocalLoss(gamma=2.0, weight=class_weights.to(device))
 
-    patience = 3
     no_improve = 0
     for epoch in range(1, PHASE2_EPOCHS + 1):
         train_loss = train_epoch(
@@ -294,8 +319,8 @@ def main():
             no_improve = 0
         else:
             no_improve += 1
-            if no_improve >= patience:
-                print(f"  Early stop at epoch {epoch} (patience={patience})")
+            if no_improve >= PHASE2_PATIENCE:
+                print(f"  Early stop at epoch {epoch} (patience={PHASE2_PATIENCE})")
                 break
 
     # Final eval on test set

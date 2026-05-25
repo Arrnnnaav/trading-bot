@@ -31,12 +31,21 @@ class CoinDCXBroker(BrokerBase):
         data = self._fetch_ticker(ticker)
         return float(data["last_price"])
 
+    @staticmethod
+    def _to_candle_pair(ticker: str) -> str:
+        # Candles endpoint uses B-BTC_USDT format; ticker internally is BTCUSDT
+        if ticker.endswith("USDT") and not ticker.startswith("B-"):
+            base = ticker[:-4]
+            return f"B-{base}_USDT"
+        return ticker
+
     def get_ohlcv(
         self, ticker: str, interval: str = "5m", limit: int = 60
     ) -> list[dict]:
+        pair = self._to_candle_pair(ticker)
         candle_resp = httpx.get(
             "https://public.coindcx.com/market_data/candles",
-            params={"pair": ticker, "interval": interval, "limit": limit},
+            params={"pair": pair, "interval": interval, "limit": limit},
         )
         candle_resp.raise_for_status()
         return candle_resp.json()

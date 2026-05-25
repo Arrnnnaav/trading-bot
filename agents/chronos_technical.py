@@ -3,8 +3,9 @@ import torch
 from pathlib import Path
 from agents.base import BaseAgent
 from core.models import AgentVote, Direction, Market
+from training.dataset import compute_stat_features
 
-# v2 preferred (attention pool + focal loss trained); falls back to v1
+# v2 preferred (attention pool + stat fusion + focal loss trained); falls back to v1
 MODEL_PATH_V2 = "models/chronos_crypto_v2/best.pt"
 MODEL_PATH_V1 = "models/chronos_crypto/best.pt"
 WINDOW = 96
@@ -61,16 +62,35 @@ class ChronosTechnicalAgent(BaseAgent):
             )
 
         closes = np.array([k["close"] for k in klines[-WINDOW:]], dtype=np.float32)
+        volumes = np.array(
+            [k.get("volume", 0.0) for k in klines[-WINDOW:]], dtype=np.float32
+        )
+
+        # Stat features: momentum + price vol + volume surge
+        stat = compute_stat_features(closes, volumes)
+        stat_tensor = torch.tensor(stat, dtype=torch.float32).to(self.device)
+
+        # Z-score normalize for encoder input
         mean, std = closes.mean(), closes.std() + 1e-8
         normalized = (closes - mean) / std
         close_tensor = torch.tensor(normalized, dtype=torch.float32).to(self.device)
 
-        direction, confidence = self.model.predict(close_tensor)
+        # v2 model accepts extra stat features; v1 model ignores them gracefully
+        try:
+            direction, confidence = self.model.predict(close_tensor, extra=stat_tensor)
+        except TypeError:
+            direction, confidence = self.model.predict(close_tensor)
 
         self.model.eval()
         with torch.no_grad():
-            logits = self.model(close_tensor.unsqueeze(0))
+            try:
+                logits = self.model(
+                    close_tensor.unsqueeze(0), extra=stat_tensor.unsqueeze(0)
+                )
+            except TypeError:
+                logits = self.model(close_tensor.unsqueeze(0))
             probs = torch.softmax(logits, dim=-1).squeeze(0).tolist()
+
         reasoning = (
             f"Chronos-2({self._version}): {direction.value} (p={confidence:.2f}) | "
             f"LONG={probs[0]:.2f} SHORT={probs[1]:.2f} HOLD={probs[2]:.2f} | "
