@@ -4,56 +4,48 @@ from pathlib import Path
 from agents.base import BaseAgent
 from core.models import AgentVote, Direction, Market
 
+_SENTIMENT_MAP = {"POSITIVE": 1.0, "NEGATIVE": -1.0, "NEUTRAL": 0.0}
+
 
 class NewsSentimentAgent(BaseAgent):
     name = "NewsSentiment"
-    BASE_URL = "https://cryptopanic.com/api/v1/posts/"
+    BASE_URL = "https://data-api.cryptocompare.com/news/v1/article/list"
 
-    def __init__(self, api_key: str):
-        self.api_key = api_key
+    def __init__(self):
         thresholds = self._load_thresholds()
         self._sentiment_threshold = thresholds.get("news_sentiment_threshold", 0.2)
 
     def _load_thresholds(self) -> dict:
         try:
             return json.loads(Path("data/calibrated_thresholds.json").read_text())
-        except (FileNotFoundError, Exception):
+        except Exception:
             return {}
 
     def _fetch_news(self, ticker: str) -> list[dict]:
-        currency = ticker.split("/")[0]
+        currency = ticker.split("/")[0].upper()
         resp = httpx.get(
             self.BASE_URL,
-            params={
-                "auth_token": self.api_key,
-                "currencies": currency,
-                "filter": "hot",
-                "public": "true",
-            },
+            params={"limit": 20, "lang": "EN", "categories": currency},
             timeout=10,
         )
         resp.raise_for_status()
-        return resp.json().get("results", [])
+        return resp.json().get("Data", [])
 
-    def _score_posts(self, posts: list[dict]) -> float:
-        if not posts:
+    def _score_articles(self, articles: list[dict]) -> float:
+        if not articles:
             return 0.0
-        score = 0.0
-        for post in posts[:10]:
-            votes = post.get("votes", {})
-            bullish = votes.get("liked", 0)
-            bearish = votes.get("disliked", 0)
-            total = bullish + bearish
-            if total > 0:
-                score += (bullish - bearish) / total
-        return score / min(len(posts), 10)
+        scores = [
+            _SENTIMENT_MAP.get(a.get("SENTIMENT", "NEUTRAL"), 0.0)
+            for a in articles[:10]
+        ]
+        return sum(scores) / len(scores)
 
     def analyze(
         self, ticker: str, klines: list[dict], market: Market, **kwargs
     ) -> AgentVote:
         try:
-            posts = self._fetch_news(ticker)
-            score = self._score_posts(posts)
+            articles = self._fetch_news(ticker)
+            score = self._score_articles(articles)
         except Exception:
             return AgentVote(
                 agent_name=self.name,
@@ -69,7 +61,7 @@ class NewsSentimentAgent(BaseAgent):
         else:
             direction, confidence = Direction.HOLD, 0.0
 
-        headlines = [p.get("title", "")[:60] for p in posts[:3]]
+        headlines = [a.get("TITLE", "")[:60] for a in articles[:3]]
         reasoning = f"Sentiment score: {score:.2f}. Top: {' | '.join(headlines)}"
         return AgentVote(
             agent_name=self.name,
