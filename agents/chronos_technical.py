@@ -37,10 +37,21 @@ class ChronosTechnicalAgent(BaseAgent):
 
     def __init__(self):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.model, self._version = _load_best_model(self.device)
-        self.model.eval()
+        self.model = None
+        try:
+            self.model, self._version = _load_best_model(self.device)
+            self.model.eval()
+        except FileNotFoundError:
+            pass  # no model yet — analyze() returns HOLD
 
     def analyze(self, ticker: str, klines: list, market: Market, **kwargs) -> AgentVote:
+        if self.model is None:
+            return AgentVote(
+                agent_name=self.name,
+                direction=Direction.HOLD,
+                confidence=0.0,
+                reasoning="Chronos model not trained yet",
+            )
         if len(klines) < WINDOW:
             return AgentVote(
                 agent_name=self.name,
