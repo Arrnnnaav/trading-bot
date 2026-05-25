@@ -1,11 +1,15 @@
 import numpy as np
 from core.models import HarnessState, Signal, Direction, Market, AgentVote
+from core.pattern_reputation import PatternReputationTracker
 from config import config
 
 
 class RiskManager:
-    def __init__(self, market: Market):
+    def __init__(
+        self, market: Market, pattern_reputation: PatternReputationTracker | None = None
+    ):
         self.market = market
+        self.pattern_reputation = pattern_reputation
 
     def _calc_atr(self, klines: list[dict], period: int = 14) -> float:
         if len(klines) < period:
@@ -42,6 +46,7 @@ class RiskManager:
         direction: Direction,
         confidence: float,
         klines: list[dict],
+        votes: list[AgentVote] | None = None,
     ) -> tuple[bool, str]:
         if len(state.open_positions) >= config.max_open_positions_per_market:
             return (
@@ -61,6 +66,21 @@ class RiskManager:
 
         if direction == Direction.HOLD:
             return False, "Direction is HOLD"
+
+        if self.pattern_reputation and votes:
+            votes_as_dicts = [
+                {
+                    "agent_name": v.agent_name,
+                    "direction": v.direction.value,
+                    "confidence": v.confidence,
+                }
+                for v in votes
+            ]
+            allowed, reason = self.pattern_reputation.is_pattern_allowed(
+                direction.value, ticker, votes_as_dicts
+            )
+            if not allowed:
+                return False, reason
 
         entry = klines[-1]["close"]
         atr = self._calc_atr(klines)

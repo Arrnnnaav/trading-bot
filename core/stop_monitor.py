@@ -4,7 +4,14 @@ from core.models import Position, Market, Direction
 
 class StopMonitor:
     def __init__(self, crypto_broker, india_broker, harness_states: dict, telegram_bot):
-        self.brokers = {Market.CRYPTO: crypto_broker, Market.INDIA: india_broker}
+        self.brokers = {
+            k: v
+            for k, v in {
+                Market.CRYPTO: crypto_broker,
+                Market.INDIA: india_broker,
+            }.items()
+            if v is not None
+        }
         self.harness_states = (
             harness_states  # market -> HarnessState (shared reference)
         )

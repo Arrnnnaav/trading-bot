@@ -15,7 +15,14 @@ CHRONOS_OUTCOMES_PATH = os.environ.get(
 class SignalTracker:
     def __init__(self, aggregator: SignalAggregator, crypto_broker, india_broker):
         self.aggregator = aggregator
-        self.brokers = {Market.CRYPTO: crypto_broker, Market.INDIA: india_broker}
+        self.brokers = {
+            k: v
+            for k, v in {
+                Market.CRYPTO: crypto_broker,
+                Market.INDIA: india_broker,
+            }.items()
+            if v is not None
+        }
 
     def _resolve_outcome(self, entry: dict, current_price: float) -> SignalOutcome:
         direction = entry["direction"]
