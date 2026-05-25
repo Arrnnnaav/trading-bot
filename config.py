@@ -15,11 +15,7 @@ class Config:
     upstox_api_key: str = os.environ.get("UPSTOX_API_KEY", "")
     upstox_access_token: str = os.environ.get("UPSTOX_ACCESS_TOKEN", "")
 
-    # Claude API
-    anthropic_api_key: str = os.environ.get("ANTHROPIC_API_KEY", "")
-
     # Data APIs
-    cryptopanic_api_key: str = os.environ.get("CRYPTOPANIC_API_KEY", "")
     coinglass_api_key: str = os.environ.get("COINGLASS_API_KEY", "")
 
     # Trading thresholds
@@ -36,6 +32,17 @@ class Config:
     crypto_progress_path: str = "data/crypto_progress.json"
     india_progress_path: str = "data/india_progress.json"
     signal_log_path: str = "data/signal_log.json"
+
+    # Paper trading mode
+    paper_trading: bool = os.environ.get("PAPER_TRADING", "false").lower() == "true"
+    paper_trades_path: str = "data/paper_trades.json"
+
+    # Market toggles
+    enable_india: bool = os.environ.get("ENABLE_INDIA", "false").lower() == "true"
+
+    # Strategy profile — affects thresholds passed via subclass overrides
+    # Options: "balanced" (default), "aggressive", "conservative"
+    strategy_profile: str = os.environ.get("STRATEGY_PROFILE", "balanced")
 
     # Dashboard
     dashboard_host: str = "0.0.0.0"

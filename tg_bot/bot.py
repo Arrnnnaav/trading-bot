@@ -21,7 +21,14 @@ class TelegramBot:
         self, harness_states: dict, coindcx_broker, upstox_broker, signal_aggregator
     ):
         self.harness_states = harness_states
-        self.brokers = {Market.CRYPTO: coindcx_broker, Market.INDIA: upstox_broker}
+        self.brokers = {
+            k: v
+            for k, v in {
+                Market.CRYPTO: coindcx_broker,
+                Market.INDIA: upstox_broker,
+            }.items()
+            if v is not None
+        }
         self.aggregator = signal_aggregator
         self.app = Application.builder().token(config.telegram_token).build()
         self.app.add_handler(CallbackQueryHandler(self._handle_callback))
@@ -36,6 +43,7 @@ class TelegramBot:
     def _format_signal(self, signal: Signal) -> str:
         emoji = "🟢" if signal.direction == Direction.LONG else "🔴"
         action = "LONG" if signal.direction == Direction.LONG else "SHORT"
+        paper_prefix = "[PAPER] " if config.paper_trading else ""
         state = self.harness_states.get(signal.market)
         portfolio_pct = (
             (signal.position_size_inr / state.portfolio_value_inr * 100)
@@ -43,7 +51,7 @@ class TelegramBot:
             else 2.0
         )
         return (
-            f"{emoji} {action} {signal.ticker}\n"
+            f"{paper_prefix}{emoji} {action} {signal.ticker}\n"
             f"{'━' * 20}\n"
             f"Entry:   ₹{signal.entry_price:,.1f}\n"
             f"Target:  ₹{signal.target_price:,.1f}  ({((signal.target_price - signal.entry_price) / signal.entry_price * 100):+.1f}%)\n"

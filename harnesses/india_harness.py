@@ -3,11 +3,11 @@ from apscheduler.triggers.cron import CronTrigger
 import pytz
 from harnesses.base_harness import BaseHarness
 from core.models import Market
-from agents.kronos_technical import KronosTechnicalAgent
 from agents.fundamentals import FundamentalsAgent
 from agents.fii_dii import FIIDIIAgent
 from agents.options_oi import OptionsOIAgent
 from brokers.upstox import UpstoxBroker
+from brokers.paper_broker import PaperBroker
 from config import config
 
 IST = pytz.timezone("Asia/Kolkata")
@@ -27,9 +27,13 @@ class IndiaHarness(BaseHarness):
     MARKET = Market.INDIA
 
     def __init__(self, telegram_bot, signal_aggregator):
-        broker = UpstoxBroker(config.upstox_api_key, config.upstox_access_token)
+        real_broker = UpstoxBroker(config.upstox_api_key, config.upstox_access_token)
+        broker = (
+            PaperBroker(real_broker, config.paper_trades_path)
+            if config.paper_trading
+            else real_broker
+        )
         agents = [
-            KronosTechnicalAgent(),
             FundamentalsAgent(),
             FIIDIIAgent(),
             OptionsOIAgent(broker),
@@ -53,7 +57,7 @@ class IndiaHarness(BaseHarness):
                 )
             except Exception:
                 continue
-        self.update_learnings()
+        await self.update_learnings()
 
     def start(self):
         # 09:00, 11:30, 14:45 IST on weekdays

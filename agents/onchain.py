@@ -1,6 +1,10 @@
+import json
 import httpx
+from pathlib import Path
 from agents.base import BaseAgent
 from core.models import AgentVote, Direction, Market
+
+THRESHOLDS_PATH = "data/calibrated_thresholds.json"
 
 
 class OnChainAgent(BaseAgent):
@@ -9,6 +13,15 @@ class OnChainAgent(BaseAgent):
 
     def __init__(self, api_key: str):
         self.api_key = api_key
+        thresholds = self._load_thresholds()
+        self._funding_threshold = thresholds.get("onchain_funding_threshold", -0.001)
+        self._ls_ratio_threshold = thresholds.get("onchain_ls_ratio_threshold", 0.9)
+
+    def _load_thresholds(self) -> dict:
+        try:
+            return json.loads(Path(THRESHOLDS_PATH).read_text())
+        except (FileNotFoundError, json.JSONDecodeError):
+            return {}
 
     def _fetch_funding(self, symbol: str) -> float:
         resp = httpx.get(
@@ -56,8 +69,8 @@ class OnChainAgent(BaseAgent):
 
         # Negative funding = longs being paid = bullish
         # LS ratio < 0.9 = more shorts = squeeze potential = bullish
-        funding_bullish = funding < -0.001
-        ls_bullish = ls_ratio < 0.9
+        funding_bullish = funding < self._funding_threshold
+        ls_bullish = ls_ratio < self._ls_ratio_threshold
 
         if funding_bullish and ls_bullish:
             direction, confidence = Direction.LONG, 0.75
