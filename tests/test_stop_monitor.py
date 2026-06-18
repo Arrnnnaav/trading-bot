@@ -31,6 +31,7 @@ def test_should_close_when_stop_hit():
         india_broker=MagicMock(),
         harness_states={},
         telegram_bot=MagicMock(),
+        intraday_force_exit_time="23:59",
     )
     pos = make_position(entry=22400, stop=22000, target=23200)
     assert monitor._should_close(pos, current_price=21900.0) == True
@@ -41,6 +42,7 @@ def test_should_not_close_above_stop():
         india_broker=MagicMock(),
         harness_states={},
         telegram_bot=MagicMock(),
+        intraday_force_exit_time="23:59",
     )
     pos = make_position(entry=22400, stop=22000, target=23200)
     assert monitor._should_close(pos, current_price=22500.0) == False
@@ -51,6 +53,7 @@ def test_should_close_when_target_hit():
         india_broker=MagicMock(),
         harness_states={},
         telegram_bot=MagicMock(),
+        intraday_force_exit_time="23:59",
     )
     pos = make_position(entry=22400, stop=22000, target=23200)
     assert monitor._should_close(pos, current_price=23300.0) == True
@@ -61,6 +64,7 @@ def test_options_stop_40pct():
         india_broker=MagicMock(),
         harness_states={},
         telegram_bot=MagicMock(),
+        intraday_force_exit_time="23:59",
     )
     pos = Position(
         signal_id="s1",
@@ -97,6 +101,7 @@ async def test_close_persists_state_and_updates_signal(monkeypatch, tmp_path):
         harness_states={Market.INDIA: state},
         telegram_bot=telegram,
         signal_aggregator=aggregator,
+        intraday_force_exit_time="23:59",
     )
 
     await monitor._check_position(pos, Market.INDIA)
