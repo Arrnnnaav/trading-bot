@@ -521,3 +521,93 @@ class TestPrintReport:
         assert "2020" in out
         assert "1.80" in out
         assert "Gate" in out
+
+
+class TestCLIOutput:
+    def test_json_output_format(self, tmp_path):
+        """Verify JSON schema produced by save_results_json."""
+        import json
+        from backtesting.india_backtest import BacktestResult, save_results_json
+
+        results = [
+            BacktestResult(
+                year=2020,
+                sharpe=1.8,
+                sortino=2.1,
+                max_drawdown_pct=9.5,
+                win_rate=52.0,
+                profit_factor=1.6,
+                total_trades=100,
+                avg_hold_days=4.2,
+                total_pnl=120000.0,
+                monthly_pnl={"2020-01": 5000.0},
+            )
+        ]
+        out_file = tmp_path / "backtest_results.json"
+        save_results_json(results, str(out_file))
+        assert out_file.exists()
+        data = json.loads(out_file.read_text())
+        assert "run_date" in data
+        assert "gate_passed" in data
+        assert "gate_thresholds" in data
+        assert "results" in data
+        assert data["gate_thresholds"]["sharpe_min"] == 1.5
+        assert data["gate_thresholds"]["max_drawdown_pct_max"] == 15.0
+        assert data["gate_thresholds"]["win_rate_pct_min"] == 45.0
+        assert len(data["results"]) == 1
+        assert data["results"][0]["year"] == 2020
+        assert data["results"][0]["monthly_pnl"]["2020-01"] == 5000.0
+
+    def test_json_gate_passed_field(self, tmp_path):
+        import json
+        from backtesting.india_backtest import BacktestResult, save_results_json
+
+        passing = BacktestResult(
+            year=2020,
+            sharpe=2.0,
+            sortino=2.5,
+            max_drawdown_pct=8.0,
+            win_rate=55.0,
+            profit_factor=1.8,
+            total_trades=100,
+            avg_hold_days=4.0,
+            total_pnl=100000.0,
+            monthly_pnl={},
+        )
+        out = tmp_path / "r.json"
+        save_results_json([passing], str(out))
+        data = json.loads(out.read_text())
+        assert data["gate_passed"] is True
+
+    def test_json_gate_failed_field(self, tmp_path):
+        import json
+        from backtesting.india_backtest import BacktestResult, save_results_json
+
+        failing = BacktestResult(
+            year=2020,
+            sharpe=0.5,
+            sortino=0.8,
+            max_drawdown_pct=20.0,
+            win_rate=40.0,
+            profit_factor=0.9,
+            total_trades=50,
+            avg_hold_days=3.0,
+            total_pnl=-30000.0,
+            monthly_pnl={},
+        )
+        out = tmp_path / "r.json"
+        save_results_json([failing], str(out))
+        data = json.loads(out.read_text())
+        assert data["gate_passed"] is False
+
+    def test_argparse_defaults(self):
+        """Verify argparse defaults match spec."""
+        from backtesting.india_backtest import _build_arg_parser
+
+        parser = _build_arg_parser()
+        args = parser.parse_args([])
+        assert args.start_year == 2010
+        assert args.model == "models/xgb_india/model.pkl"
+        assert args.historical_dir == "data/historical"
+        assert args.fii_dir == "data/fii_dii"
+        assert args.out == "data/backtest_results.json"

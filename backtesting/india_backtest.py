@@ -11,8 +11,11 @@ across ALL OOS years (2010–present).
 
 from __future__ import annotations
 
+import argparse
+import json
 import math
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 
@@ -616,3 +619,107 @@ def print_report(results: list[BacktestResult]) -> None:
         f"(Sharpe>{GATE_SHARPE}, MaxDD<{GATE_MAX_DD_PCT}%, WinRate>{GATE_WIN_RATE_PCT}%)"
     )
     print(sep)
+
+
+# ---------------------------------------------------------------------------
+# JSON persistence + CLI
+# ---------------------------------------------------------------------------
+
+
+def save_results_json(results: list[BacktestResult], out_path: str) -> None:
+    """Serialize backtest results to JSON at out_path."""
+    from datetime import datetime, timezone
+
+    payload = {
+        "run_date": datetime.now(timezone.utc).isoformat(),
+        "gate_passed": passes_live_gate(results),
+        "gate_thresholds": {
+            "sharpe_min": GATE_SHARPE,
+            "max_drawdown_pct_max": GATE_MAX_DD_PCT,
+            "win_rate_pct_min": GATE_WIN_RATE_PCT,
+        },
+        "results": [
+            {
+                "year": r.year,
+                "sharpe": r.sharpe,
+                "sortino": r.sortino,
+                "max_drawdown_pct": r.max_drawdown_pct,
+                "win_rate": r.win_rate,
+                "profit_factor": r.profit_factor,
+                "total_trades": r.total_trades,
+                "avg_hold_days": r.avg_hold_days,
+                "total_pnl": r.total_pnl,
+                "monthly_pnl": r.monthly_pnl,
+            }
+            for r in results
+        ],
+    }
+    out = Path(out_path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(payload, indent=2, ensure_ascii=False))
+    print(f"[backtest] Results saved → {out}")
+
+
+def _build_arg_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(
+        description="Walk-forward backtest for India index options strategy"
+    )
+    p.add_argument(
+        "--start-year",
+        type=int,
+        default=2010,
+        dest="start_year",
+        help="First OOS year (default: 2010)",
+    )
+    p.add_argument(
+        "--end-year",
+        type=int,
+        default=None,
+        dest="end_year",
+        help="Last OOS year inclusive (default: last full calendar year)",
+    )
+    p.add_argument(
+        "--model",
+        type=str,
+        default="models/xgb_india/model.pkl",
+        help="Path to trained LightGBM model pickle",
+    )
+    p.add_argument(
+        "--historical-dir",
+        type=str,
+        default="data/historical",
+        dest="historical_dir",
+        help="Directory containing {SYM}_daily.parquet files",
+    )
+    p.add_argument(
+        "--fii-dir",
+        type=str,
+        default="data/fii_dii",
+        dest="fii_dir",
+        help="Directory containing YYYY-MM-DD.json FII/DII files",
+    )
+    p.add_argument(
+        "--out",
+        type=str,
+        default="data/backtest_results.json",
+        help="Output JSON path for results",
+    )
+    return p
+
+
+if __name__ == "__main__":
+    args = _build_arg_parser().parse_args()
+    print(
+        f"[backtest] Running walk-forward {args.start_year}–{args.end_year or 'present'}"
+    )
+    results = run_backtest(
+        historical_dir=args.historical_dir,
+        model_path=args.model,
+        fii_dir=args.fii_dir,
+        start_year=args.start_year,
+        end_year=args.end_year,
+    )
+    print_report(results)
+    save_results_json(results, args.out)
+    ok = passes_live_gate(results)
+    exit(0 if ok else 1)
