@@ -10,9 +10,9 @@ Design spec for the v2 pivot: `docs/superpowers/specs/2026-06-18-india-trading-b
 
 ---
 
-## Status: IN PROGRESS (v2 India pivot, 2026-06-18)
+## Status: PAPER TRADING PENDING — all 5 build phases complete (2026-06-18)
 
-Full pivot from crypto+India to **India-only index options trading**. Crypto components are being removed. Architecture (BaseHarness, DebateEngine, RiskManager, SignalAggregator, StopMonitor, TelegramBot, Dashboard) is preserved.
+Full pivot from crypto+India to **India-only index options trading**. All phases built. Waiting on real FII/DII data accumulation + improved model training before live gate passes.
 
 ---
 
@@ -288,11 +288,11 @@ ENABLE_POSITIONAL=true
 | Phase | Status | Description |
 |-------|--------|-------------|
 | 0 | ✅ Done | Architecture hardening (atomic writes, retries, logging, tests — 119 passing) |
-| 1 | 🔲 Next | Crypto removal + India data pipeline + new harness structure |
-| 2 | 🔲 | 6 new/upgraded agents |
-| 3 | 🔲 | Kronos + XGBoost training on Indian data |
-| 4 | 🔲 | News intelligence (ChromaDB + historical analogues) |
-| 5 | 🔲 | Backtesting + walk-forward validation |
+| 1 | ✅ Done | Crypto removal + India data pipeline + new harness structure |
+| 2 | ✅ Done | 6 new/upgraded agents (Technical, OptionsChain, NewsAnalogue, FII/DII, Macro, Kronos) |
+| 3 | ✅ Done | Kronos + XGBoost training on Indian data (models trained; F1=0.36 — needs more FII data) |
+| 4 | ✅ Done | News intelligence (ChromaDB 66 docs, 15 events, FII/DII fetcher, live news scheduler) |
+| 5 | ✅ Done | Backtesting + walk-forward validation (infrastructure complete; gate fails — model needs data) |
 
 ---
 
@@ -300,7 +300,7 @@ ENABLE_POSITIONAL=true
 
 ```bash
 python -m pytest tests/ -v --basetemp=.pytest-tmp
-# Expected: 119 passed (as of 2026-06-18)
+# Expected: 247 passed (as of 2026-06-18, post all phases)
 ```
 
 ---

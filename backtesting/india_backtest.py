@@ -164,12 +164,16 @@ def _simulate_position(
     target_mult: float = TARGET_MULT,
     stop_pct: float = STOP_LOSS_PCT,
     max_days: int = MAX_HOLD_DAYS,
+    entry_spot: float = 0.0,
+    direction: int = 0,
 ) -> dict:
     """
     Simulate one options position from entry to exit.
 
-    Steps through daily_closes applying cumulative theta decay each day.
-    Checks stop and target against the decayed premium.
+    Each day, premium is updated by both theta decay and delta P&L:
+      - direction=1  → long call (delta ≈ +0.5): benefits when spot rises
+      - direction=-1 → long put  (delta ≈ +0.5): benefits when spot falls
+      - direction=0  → theta-only (legacy, no delta; used by unit tests)
 
     Returns dict:
       exit_reason  : "TARGET_HIT" | "STOP_HIT" | "TIME_EXIT"
@@ -178,15 +182,23 @@ def _simulate_position(
       pnl_pct      : float  — (exit_premium - entry_premium) / entry_premium
       pnl_inr      : float  — gross P&L in ₹ net of round-trip transaction cost
     """
+    ATM_DELTA = 0.5
     stop_level = entry_premium * (1.0 - stop_pct)
     target_level = entry_premium * target_mult
     cap = min(max_days, len(daily_closes))
 
     exit_reason = "TIME_EXIT"
     hold_days = cap
+    current_premium = entry_premium
 
     for day in range(1, cap + 1):
-        current_premium = _apply_theta_decay(entry_premium, iv_annual, day)
+        theta_loss = entry_premium * (iv_annual / math.sqrt(252.0)) * day
+        if direction != 0 and entry_spot > 0:
+            spot_move = daily_closes[day - 1] - entry_spot
+            delta_gain = ATM_DELTA * direction * spot_move
+        else:
+            delta_gain = 0.0
+        current_premium = max(0.0, entry_premium + delta_gain - theta_loss)
         if current_premium <= stop_level:
             exit_reason = "STOP_HIT"
             hold_days = day
@@ -196,7 +208,15 @@ def _simulate_position(
             hold_days = day
             break
 
-    exit_premium = _apply_theta_decay(entry_premium, iv_annual, hold_days)
+    # Re-price at exit day using same formula
+    if direction != 0 and entry_spot > 0 and len(daily_closes) >= hold_days:
+        theta_loss_exit = entry_premium * (iv_annual / math.sqrt(252.0)) * hold_days
+        spot_move_exit = daily_closes[hold_days - 1] - entry_spot
+        delta_gain_exit = ATM_DELTA * direction * spot_move_exit
+        exit_premium = max(0.0, entry_premium + delta_gain_exit - theta_loss_exit)
+    else:
+        exit_premium = _apply_theta_decay(entry_premium, iv_annual, hold_days)
+
     txn_cost = _calc_transaction_cost(entry_premium, lot_size)
     gross_pnl_inr = (exit_premium - entry_premium) * lot_size
     pnl_inr = gross_pnl_inr - txn_cost
@@ -241,9 +261,12 @@ def _sortino(returns: np.ndarray) -> float:
     return float(returns.mean() / downside_std * math.sqrt(252))
 
 
-def _max_drawdown(cumulative_pnl: np.ndarray) -> float:
+def _max_drawdown(cumulative_pnl: np.ndarray, base_capital: float = 0.0) -> float:
     """
     Max peak-to-trough percentage decline in a cumulative P&L array (₹).
+
+    Denominator: max(abs(peak_pnl), base_capital). Pass base_capital=initial_notional
+    to avoid inflated percentages when cumulative P&L starts near zero.
 
     Returns positive percentage (e.g. 12.5 means 12.5% drawdown).
     Returns 0.0 if array is empty or monotonically increasing.
@@ -255,9 +278,9 @@ def _max_drawdown(cumulative_pnl: np.ndarray) -> float:
     for val in cumulative_pnl:
         if val > peak:
             peak = val
-        if peak != 0:
-            # Approximation: denominator is abs(peak_pnl), not starting capital.
-            dd = (peak - val) / abs(peak) * 100.0
+        denom = max(abs(peak), base_capital)
+        if denom > 0:
+            dd = (peak - val) / denom * 100.0
             max_dd = max(max_dd, dd)
     return max_dd
 
@@ -356,6 +379,8 @@ def _simulate_year(
             continue
 
         remaining_closes = closes[i + 1 :].tolist()
+        # pred=0 → LONG → buy call (direction=+1); pred=1 → SHORT → buy put (direction=-1)
+        direction = 1 if pred == 0 else -1
 
         trade = _simulate_position(
             entry_premium=entry_premium,
@@ -365,6 +390,8 @@ def _simulate_year(
             target_mult=target_mult,
             stop_pct=stop_pct,
             max_days=max_hold_days,
+            entry_spot=spot,
+            direction=direction,
         )
         trade["entry_date"] = dates.iloc[i]
         trades.append(trade)
@@ -410,7 +437,7 @@ def _simulate_year(
         year=year,
         sharpe=_sharpe(daily_ret),
         sortino=_sortino(daily_ret),
-        max_drawdown_pct=_max_drawdown(cum_pnl),
+        max_drawdown_pct=_max_drawdown(cum_pnl, base_capital=initial_notional),
         win_rate=win_rate,
         profit_factor=profit_factor,
         total_trades=len(trades),
