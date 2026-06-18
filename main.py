@@ -117,6 +117,7 @@ async def main():
         harness_states=harness_states,
         telegram_bot=telegram_bot,
         signal_aggregator=aggregator,
+        intraday_force_exit_time=config.intraday_force_exit,
     )
 
     server = uvicorn.Server(
