@@ -16,6 +16,8 @@ class StopMonitor:
         harness_states: dict,
         telegram_bot,
         signal_aggregator=None,
+        crypto_broker=None,
+        intraday_force_exit_time: str = "15:15",
     ):
         self.brokers = {
             Market.INDIA: india_broker,
@@ -25,6 +27,7 @@ class StopMonitor:
         )
         self.telegram_bot = telegram_bot
         self.signal_aggregator = signal_aggregator
+        self._force_exit_hhmm = intraday_force_exit_time  # "HH:MM" IST
 
     @staticmethod
     def _state_path(market: Market) -> str:
@@ -53,9 +56,29 @@ class StopMonitor:
             if current_price <= position.target_price:
                 return SignalOutcome.TARGET_HIT
 
+        if self._is_past_force_exit(position):
+            return SignalOutcome.EXPIRED
         if self._is_expired(position):
             return SignalOutcome.EXPIRED
         return None
+
+    def _is_past_force_exit(self, position: Position) -> bool:
+        """Return True if intraday India position should be force-closed at day end."""
+        if position.market != Market.INDIA:
+            return False
+        if position.expires_at is not None:
+            return False  # positional — has explicit expiry, handled by _is_expired()
+        try:
+            from zoneinfo import ZoneInfo
+        except ImportError:
+            import pytz  # type: ignore[import]
+
+            IST = pytz.timezone("Asia/Kolkata")
+            now_ist = datetime.now(IST)
+        else:
+            now_ist = datetime.now(ZoneInfo("Asia/Kolkata"))
+        hh, mm = (int(x) for x in self._force_exit_hhmm.split(":"))
+        return now_ist.hour > hh or (now_ist.hour == hh and now_ist.minute >= mm)
 
     def _is_expired(self, position: Position) -> bool:
         try:
