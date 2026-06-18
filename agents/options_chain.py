@@ -33,8 +33,8 @@ def _calc_max_pain(chain: list[dict]) -> Optional[float]:
             s = other.get("strike_price", 0)
             call_oi = other.get("call_options", {}).get("market_data", {}).get("oi", 0)
             put_oi = other.get("put_options", {}).get("market_data", {}).get("oi", 0)
-            total_pain += call_oi * max(0, strike - s)
-            total_pain += put_oi * max(0, s - strike)
+            total_pain += call_oi * max(0, s - strike)
+            total_pain += put_oi * max(0, strike - s)
         if total_pain < min_pain:
             min_pain = total_pain
             best_strike = strike
@@ -81,11 +81,14 @@ class OptionsChainAgent(BaseAgent):
                     reasoning="empty chain",
                 )
 
-            current_price = (
-                klines[-1]["close"]
-                if klines
-                else (self.broker.get_price(ticker) if self.broker else None)
-            )
+            if not klines:
+                return AgentVote(
+                    agent_name=self.name,
+                    direction=Direction.HOLD,
+                    confidence=0.0,
+                    reasoning="no klines for price reference",
+                )
+            current_price = klines[-1]["close"]
             return self._compute(chain, current_price)
         except Exception as exc:
             _LOG.warning("OptionsChainAgent failed: %s", exc)
@@ -113,7 +116,7 @@ class OptionsChainAgent(BaseAgent):
 
         # Max pain
         max_pain = _calc_max_pain(chain)
-        if max_pain and current_price:
+        if max_pain is not None and current_price is not None:
             if current_price > max_pain * 1.01:
                 score -= 1
                 signals.append(f"above max_pain={max_pain:.0f}")
@@ -123,7 +126,7 @@ class OptionsChainAgent(BaseAgent):
 
         reasoning = "; ".join(signals) or "neutral options"
         if score >= 2:
-            confidence = min(0.5 + score * 0.08, 0.90)
+            confidence = min(0.5 + abs(score) * 0.08, 0.90)
             return AgentVote(
                 agent_name=self.name,
                 direction=Direction.LONG,

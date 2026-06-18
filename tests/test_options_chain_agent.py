@@ -89,9 +89,30 @@ def test_options_broker_called_when_no_chain(monkeypatch):
     agent = OptionsChainAgent(broker=mock_broker)
     vote = agent.analyze("NIFTY", _klines(), Market.INDIA, expiry="2026-06-26")
     mock_broker.get_options_chain.assert_called_once_with("NIFTY", "2026-06-26")
+    assert vote.direction == Direction.LONG
 
 
 def test_options_agent_never_raises():
     agent = OptionsChainAgent()
     vote = agent.analyze("NIFTY", [], Market.INDIA, options_chain=[])
+    assert vote.direction == Direction.HOLD
+
+
+def test_options_max_pain_below_price_is_short():
+    """PCR neutral, but price above max_pain → score -1 total (not enough for SHORT alone, so HOLD)."""
+    # Use a chain where PCR is neutral (0.7-1.3) to isolate max pain
+    chain = []
+    for i, strike in enumerate(range(22000, 22600, 50)):
+        chain.append(
+            {
+                "strike_price": strike,
+                "call_options": {"market_data": {"oi": 1000}},
+                "put_options": {"market_data": {"oi": 1000}},  # PCR = 1.0 neutral
+            }
+        )
+    agent = OptionsChainAgent()
+    # Current price well above max pain → score = -1 → HOLD (not enough for SHORT)
+    vote = agent.analyze("NIFTY", _klines(22550.0), Market.INDIA, options_chain=chain)
+    # Max pain with equal OI at all strikes → max pain at lowest strike (22000)
+    # price 22550 > 22000 * 1.01 → score -1 → HOLD
     assert vote.direction == Direction.HOLD
