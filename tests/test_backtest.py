@@ -336,3 +336,188 @@ class TestSimulateYear:
             _INDEX_SPEC["NSEI"],
         )
         assert result.profit_factor >= 0.0
+
+
+class TestPassesLiveGate:
+    def _make_result(self, sharpe, max_dd, win_rate, year=2020):
+        from backtesting.india_backtest import BacktestResult
+
+        return BacktestResult(
+            year=year,
+            sharpe=sharpe,
+            sortino=1.0,
+            max_drawdown_pct=max_dd,
+            win_rate=win_rate,
+            profit_factor=1.5,
+            total_trades=100,
+            avg_hold_days=4.0,
+            total_pnl=50000.0,
+            monthly_pnl={},
+        )
+
+    def test_all_conditions_pass(self):
+        from backtesting.india_backtest import passes_live_gate
+
+        results = [self._make_result(sharpe=1.8, max_dd=10.0, win_rate=50.0)]
+        assert passes_live_gate(results) is True
+
+    def test_fails_on_low_sharpe(self):
+        from backtesting.india_backtest import passes_live_gate
+
+        results = [self._make_result(sharpe=1.2, max_dd=10.0, win_rate=50.0)]
+        assert passes_live_gate(results) is False
+
+    def test_fails_on_high_drawdown(self):
+        from backtesting.india_backtest import passes_live_gate
+
+        results = [self._make_result(sharpe=2.0, max_dd=16.0, win_rate=50.0)]
+        assert passes_live_gate(results) is False
+
+    def test_fails_on_low_win_rate(self):
+        from backtesting.india_backtest import passes_live_gate
+
+        results = [self._make_result(sharpe=2.0, max_dd=10.0, win_rate=44.9)]
+        assert passes_live_gate(results) is False
+
+    def test_empty_results_returns_false(self):
+        from backtesting.india_backtest import passes_live_gate
+
+        assert passes_live_gate([]) is False
+
+    def test_any_bad_year_fails_gate(self):
+        from backtesting.india_backtest import passes_live_gate
+
+        results = [
+            self._make_result(sharpe=2.0, max_dd=10.0, win_rate=50.0, year=2020),
+            self._make_result(sharpe=2.0, max_dd=10.0, win_rate=50.0, year=2021),
+            self._make_result(
+                sharpe=1.0, max_dd=10.0, win_rate=50.0, year=2022
+            ),  # fails
+        ]
+        assert passes_live_gate(results) is False
+
+    def test_all_years_must_individually_pass(self):
+        from backtesting.india_backtest import passes_live_gate
+
+        results = [
+            self._make_result(sharpe=2.0, max_dd=5.0, win_rate=60.0, year=y)
+            for y in range(2010, 2025)
+        ]
+        assert passes_live_gate(results) is True
+
+
+def _make_stub_df(start: str, periods: int) -> "pd.DataFrame":
+    """Build a minimal multi-symbol DataFrame that mimics load_india_data output."""
+    import pandas as pd
+    import numpy as np
+
+    frames = []
+    for sym in ["NSEI", "NSEBANK", "BSESN", "CNXIT"]:
+        dates = pd.date_range(start, periods=periods, freq="B")
+        close = 10000.0 + np.arange(periods, dtype=float)
+        df = pd.DataFrame(
+            {
+                "date": dates,
+                "open": close,
+                "high": close,
+                "low": close,
+                "close": close,
+                "volume": 0.0,
+                "symbol": sym,
+                "label": "HOLD",
+                "fii_5d_net": 0.0,
+            }
+        )
+        frames.append(df)
+    combined = pd.concat(frames, ignore_index=True).sort_values("date")
+    return combined
+
+
+def _stub_compute_features(df, fii_dir="data/fii_dii"):
+    """Pass-through stub: compute_features returns df unchanged (no real feature eng)."""
+    import pandas as pd
+
+    out = df.copy()
+    # Ensure a DatetimeIndex named 'date' so _simulate_year's reset_index() works
+    if "date" in out.columns and not isinstance(out.index, pd.DatetimeIndex):
+        out = out.set_index(pd.DatetimeIndex(pd.to_datetime(out["date"]), name="date"))
+        out = out.drop(columns=["date"], errors="ignore")
+    return out
+
+
+class TestRunBacktestMonkeypatch:
+    """Monkeypatches load_india_data + compute_features + _train_lgb_for_backtest."""
+
+    def _patch_all(self, monkeypatch, stub_df):
+        import numpy as np
+
+        monkeypatch.setattr("training.dataset.load_india_data", lambda **kw: stub_df)
+        monkeypatch.setattr(
+            "training.india_features.compute_features", _stub_compute_features
+        )
+        monkeypatch.setattr(
+            "backtesting.india_backtest._train_lgb_for_backtest",
+            lambda X, y: type(
+                "M",
+                (),
+                {"predict": lambda self, X: np.full(len(X), 2, dtype=np.int64)},
+            )(),
+        )
+
+    def test_returns_list_of_backtest_results(self, monkeypatch, tmp_path):
+        import backtesting.india_backtest as bt
+        from backtesting.india_backtest import BacktestResult
+
+        stub_df = _make_stub_df("2009-01-01", 1000)
+        self._patch_all(monkeypatch, stub_df)
+
+        results = bt.run_backtest(
+            historical_dir=str(tmp_path),
+            model_path=str(tmp_path / "model.pkl"),
+            fii_dir=str(tmp_path),
+            start_year=2011,
+            end_year=2012,
+        )
+        assert isinstance(results, list)
+        assert all(isinstance(r, BacktestResult) for r in results)
+
+    def test_results_sorted_by_year(self, monkeypatch, tmp_path):
+        import backtesting.india_backtest as bt
+
+        stub_df = _make_stub_df("2009-01-01", 1500)
+        self._patch_all(monkeypatch, stub_df)
+
+        results = bt.run_backtest(
+            historical_dir=str(tmp_path),
+            model_path=str(tmp_path / "model.pkl"),
+            fii_dir=str(tmp_path),
+            start_year=2011,
+            end_year=2014,
+        )
+        years = [r.year for r in results]
+        assert years == sorted(years)
+
+
+class TestPrintReport:
+    def test_runs_without_error(self, capsys):
+        from backtesting.india_backtest import print_report, BacktestResult
+
+        results = [
+            BacktestResult(
+                year=2020,
+                sharpe=1.8,
+                sortino=2.1,
+                max_drawdown_pct=9.5,
+                win_rate=52.0,
+                profit_factor=1.6,
+                total_trades=100,
+                avg_hold_days=4.2,
+                total_pnl=120000.0,
+                monthly_pnl={},
+            )
+        ]
+        print_report(results)
+        out = capsys.readouterr().out
+        assert "2020" in out
+        assert "1.80" in out
+        assert "Gate" in out

@@ -411,3 +411,208 @@ def _simulate_year(
         total_pnl=float(cum_pnl[-1]),
         monthly_pnl=monthly_buckets,
     )
+
+
+# ---------------------------------------------------------------------------
+# Internal LightGBM training wrapper (importable for monkeypatching in tests)
+# ---------------------------------------------------------------------------
+
+
+def _train_lgb_for_backtest(X_train, y_train):
+    """Thin wrapper around training.train_xgb_india._train_lgb for monkeypatching."""
+    from training.train_xgb_india import _train_lgb
+
+    return _train_lgb(X_train, y_train, n_estimators=200)
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
+
+def run_backtest(
+    historical_dir: str = "data/historical",
+    model_path: str = "models/xgb_india/model.pkl",
+    fii_dir: str = "data/fii_dii",
+    start_year: int = 2010,
+    end_year: int | None = None,
+) -> list[BacktestResult]:
+    """
+    Expanding-window walk-forward backtest across all 4 India indices.
+
+    For each OOS year, trains a fresh LightGBM on all prior data, then
+    runs _simulate_year per index and combines results (trade-count-weighted
+    averages for rate metrics; sums for P&L).
+    """
+    import numpy as np
+    import pandas as pd
+    from training.dataset import load_india_data
+    from training.india_features import compute_features
+
+    if end_year is None:
+        end_year = pd.Timestamp.now().year - 1
+
+    # Load all indices; dataset.py merges parquets with 'symbol' column
+    df = load_india_data(historical_dir=historical_dir, fii_dir=fii_dir)
+    if "date" not in df.columns:
+        df = df.reset_index()
+    df["date"] = pd.to_datetime(df["date"])
+    df = df.sort_values("date").reset_index(drop=True)
+
+    combined_results: list[BacktestResult] = []
+
+    for oos_year in range(start_year, end_year + 1):
+        cutoff = pd.Timestamp(f"{oos_year}-01-01")
+        next_year = pd.Timestamp(f"{oos_year + 1}-01-01")
+
+        train_df = df[df["date"] < cutoff]
+        oos_df = df[(df["date"] >= cutoff) & (df["date"] < next_year)]
+
+        if len(train_df) < 500 or len(oos_df) < 20:
+            print(
+                f"[backtest] {oos_year}: skipped — insufficient data "
+                f"(train={len(train_df)}, oos={len(oos_df)})"
+            )
+            continue
+
+        # Compute features for training set; drop NaN warm-up rows
+        train_feat = compute_features(train_df.copy(), fii_dir=fii_dir).dropna()
+        feature_cols = [c for c in train_feat.columns if c not in _FEATURE_EXCLUDE]
+        if not feature_cols:
+            print(f"[backtest] {oos_year}: skipped — no feature columns")
+            continue
+
+        X_train = train_feat[feature_cols].to_numpy(dtype=np.float32)
+        y_train = train_feat["label"].map(_LABEL_MAP).fillna(2).to_numpy(dtype=np.int64)
+
+        model = _train_lgb_for_backtest(X_train, y_train)
+
+        # Run per-index simulation
+        per_index_results: list[BacktestResult] = []
+        symbols_in_oos = (
+            oos_df["symbol"].unique()
+            if "symbol" in oos_df.columns
+            else list(_INDEX_SPEC.keys())
+        )
+        for sym in symbols_in_oos:
+            if sym not in _INDEX_SPEC:
+                continue
+            spec = _INDEX_SPEC[sym]
+            sym_train = (
+                train_df[train_df["symbol"] == sym]
+                if "symbol" in train_df.columns
+                else train_df
+            )
+            sym_oos = (
+                oos_df[oos_df["symbol"] == sym]
+                if "symbol" in oos_df.columns
+                else oos_df
+            )
+            if len(sym_oos) < 5:
+                continue
+            r = _simulate_year(sym_train, sym_oos, model, spec, fii_dir=fii_dir)
+            per_index_results.append(r)
+
+        if not per_index_results:
+            continue
+
+        # Combine per-index results into one year result
+        total_trades = sum(r.total_trades for r in per_index_results)
+        total_pnl = sum(r.total_pnl for r in per_index_results)
+
+        def _weighted_avg(attr: str) -> float:
+            if total_trades == 0:
+                return 0.0
+            return (
+                sum(getattr(r, attr) * r.total_trades for r in per_index_results)
+                / total_trades
+            )
+
+        combined_monthly: dict[str, float] = {}
+        for r in per_index_results:
+            for month, pnl in r.monthly_pnl.items():
+                combined_monthly[month] = combined_monthly.get(month, 0.0) + pnl
+
+        combined = BacktestResult(
+            year=oos_year,
+            sharpe=_weighted_avg("sharpe"),
+            sortino=_weighted_avg("sortino"),
+            max_drawdown_pct=max(r.max_drawdown_pct for r in per_index_results),
+            win_rate=_weighted_avg("win_rate"),
+            profit_factor=_weighted_avg("profit_factor"),
+            total_trades=total_trades,
+            avg_hold_days=_weighted_avg("avg_hold_days"),
+            total_pnl=total_pnl,
+            monthly_pnl=combined_monthly,
+        )
+        combined_results.append(combined)
+
+        gate_sym = (
+            "✅"
+            if (
+                combined.sharpe > GATE_SHARPE
+                and combined.max_drawdown_pct < GATE_MAX_DD_PCT
+                and combined.win_rate > GATE_WIN_RATE_PCT
+            )
+            else "❌"
+        )
+        print(
+            f"[backtest] {oos_year}: Sharpe={combined.sharpe:.2f}  "
+            f"MaxDD={combined.max_drawdown_pct:.1f}%  "
+            f"WinRate={combined.win_rate:.1f}%  "
+            f"Trades={combined.total_trades}  {gate_sym}"
+        )
+
+    return sorted(combined_results, key=lambda r: r.year)
+
+
+def passes_live_gate(results: list[BacktestResult]) -> bool:
+    """
+    Returns True only if ALL conditions hold across ALL OOS years:
+      sharpe > 1.5  AND  max_drawdown_pct < 15.0  AND  win_rate > 45.0
+
+    Returns False if results is empty.
+    """
+    if not results:
+        return False
+    return all(
+        r.sharpe > GATE_SHARPE
+        and r.max_drawdown_pct < GATE_MAX_DD_PCT
+        and r.win_rate > GATE_WIN_RATE_PCT
+        for r in results
+    )
+
+
+def print_report(results: list[BacktestResult]) -> None:
+    """Print formatted backtest summary table to stdout."""
+    sep = "─" * 98
+    header = (
+        f"{'Year':>6} │ {'Sharpe':>7} │ {'Sortino':>8} │ {'MaxDD%':>7} │ "
+        f"{'WinRate%':>9} │ {'ProfFact':>9} │ {'Trades':>7} │ "
+        f"{'AvgHoldDy':>10} │ {'PnL ₹':>12}"
+    )
+    print(sep)
+    print(header)
+    print(sep)
+    for r in results:
+        pnl_lakh = r.total_pnl / 100_000
+        gate_ok = (
+            r.sharpe > GATE_SHARPE
+            and r.max_drawdown_pct < GATE_MAX_DD_PCT
+            and r.win_rate > GATE_WIN_RATE_PCT
+        )
+        marker = "✅" if gate_ok else "❌"
+        print(
+            f"{r.year:>6} │ {r.sharpe:>7.2f} │ {r.sortino:>8.2f} │ "
+            f"{r.max_drawdown_pct:>6.1f}% │ {r.win_rate:>8.1f}% │ "
+            f"{r.profit_factor:>9.2f} │ {r.total_trades:>7d} │ "
+            f"{r.avg_hold_days:>9.1f}d │ {pnl_lakh:>10.2f}L  {marker}"
+        )
+    print(sep)
+    gate_pass = passes_live_gate(results)
+    gate_label = "PASSED ✅" if gate_pass else "FAILED ❌"
+    print(
+        f"Gate: {gate_label}  "
+        f"(Sharpe>{GATE_SHARPE}, MaxDD<{GATE_MAX_DD_PCT}%, WinRate>{GATE_WIN_RATE_PCT}%)"
+    )
+    print(sep)
