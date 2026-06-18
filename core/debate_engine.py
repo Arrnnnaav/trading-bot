@@ -1,16 +1,16 @@
 """
-DebateEngine — multi-agent vote consensus + adversarial bull/bear debate.
+DebateEngine — multi-agent vote consensus + 3-round adversarial bull/bear debate.
 
 Flow:
   1. reach_consensus(votes, ticker) — vote counting + threshold check
   2. If direction != HOLD: _adversarial_debate() runs
-     a. Bull researcher (haiku)  — argues FOR the trade  } parallel via asyncio.gather
-     b. Bear researcher (haiku)  — argues AGAINST the trade }
-     c. Opus adjudicator         — makes final LONG/SHORT/HOLD + confidence
-  3. generate_reasoning()        — Telegram-facing 2-sentence rationale (haiku)
+     a. Bull R1 (haiku)   — opening case FOR the trade
+     b. Bear R2 (haiku)   — sees Bull R1, specifically attacks its weakest points
+     c. Bull R3 (haiku)   — sees Bear R2, rebuts strongest criticism
+     d. Opus adjudicator  — sees all 3 rounds → LONG/SHORT/HOLD + confidence
+  3. generate_reasoning() — Telegram-facing 2-sentence rationale (haiku)
 """
 
-import asyncio
 import re
 from core.llm_client import ClaudeCodeClient
 from core.models import AgentVote, Direction
@@ -108,38 +108,93 @@ class DebateEngine:
         initial_confidence: float,
     ) -> dict:
         transcript = self._build_transcript(votes)
-        bull_arg, bear_arg = await asyncio.gather(
-            self._run_researcher("bull", transcript, ticker, initial_direction),
-            self._run_researcher("bear", transcript, ticker, initial_direction),
+
+        # Round 1: Bull opens
+        bull_r1 = await self._run_researcher(
+            role="bull",
+            transcript=transcript,
+            ticker=ticker,
+            direction=initial_direction,
+            prior_arguments="",
         )
+
+        # Round 2: Bear specifically attacks Bull R1
+        bear_r2 = await self._run_researcher(
+            role="bear",
+            transcript=transcript,
+            ticker=ticker,
+            direction=initial_direction,
+            prior_arguments=f"Bull's opening argument:\n{bull_r1}",
+        )
+
+        # Round 3: Bull rebuts Bear R2
+        bull_r3 = await self._run_researcher(
+            role="bull_rebuttal",
+            transcript=transcript,
+            ticker=ticker,
+            direction=initial_direction,
+            prior_arguments=(
+                f"Bull's opening argument:\n{bull_r1}\n\nBear's attack:\n{bear_r2}"
+            ),
+        )
+
         return await self._adjudicate(
-            bull_arg,
-            bear_arg,
-            transcript,
-            ticker,
-            initial_direction,
-            initial_confidence,
+            bull_r1=bull_r1,
+            bear_r2=bear_r2,
+            bull_r3=bull_r3,
+            transcript=transcript,
+            ticker=ticker,
+            initial_direction=initial_direction,
+            initial_confidence=initial_confidence,
         )
 
     async def _run_researcher(
-        self, role: str, transcript: str, ticker: str, direction: Direction
+        self,
+        role: str,
+        transcript: str,
+        ticker: str,
+        direction: Direction,
+        prior_arguments: str = "",
     ) -> str:
-        stance = "FOR" if role == "bull" else "AGAINST"
-        prompt = (
-            f"You are a {role}ish researcher. Make the strongest 2-sentence case "
-            f"{stance} a {direction.value} trade on {ticker}.\n\n"
-            f"Agent signals:\n{transcript}\n\nBe specific, not generic."
+        if role == "bull":
+            instruction = (
+                f"You are a bullish researcher. Make the strongest 3-sentence opening case "
+                f"FOR a {direction.value} trade on {ticker}. Use the specific agent signals below. "
+                "Be concrete — cite exact indicators, levels, or flows."
+            )
+        elif role == "bear":
+            instruction = (
+                "You are a bearish researcher. You have read the bull's opening argument below. "
+                "Specifically attack its weakest points in 3 sentences. "
+                "Do not make generic bearish statements — respond to what bull actually said."
+            )
+        else:  # bull_rebuttal
+            instruction = (
+                "You are the bull researcher responding to the bear's attack. "
+                "In 2 sentences: address the bear's strongest criticism directly, "
+                "then reinforce the most compelling part of your original case."
+            )
+
+        context_block = (
+            f"\n\nPrior arguments:\n{prior_arguments}" if prior_arguments else ""
         )
-        return await self._client.call(
-            prompt=prompt,
-            system=self._build_system_prompt(),
-            model="claude-haiku-4-5-20251001",
+        prompt = (
+            f"{instruction}\n\nAgent signals for {ticker}:\n{transcript}{context_block}"
+        )
+        return (
+            await self._client.call(
+                prompt=prompt,
+                system=self._build_system_prompt(),
+                model="claude-haiku-4-5-20251001",
+            )
+            or ""
         )
 
     async def _adjudicate(
         self,
-        bull_arg: str,
-        bear_arg: str,
+        bull_r1: str,
+        bear_r2: str,
+        bull_r3: str,
         transcript: str,
         ticker: str,
         initial_direction: Direction,
@@ -148,9 +203,12 @@ class DebateEngine:
         prompt = (
             f"You are the senior portfolio manager making the final trading decision for {ticker}.\n\n"
             f"Initial consensus: {initial_direction.value} (confidence: {initial_confidence:.2f})\n\n"
-            f"Bull argument:\n{bull_arg}\n\n"
-            f"Bear argument:\n{bear_arg}\n\n"
-            f"Agent votes:\n{transcript}\n\n"
+            f"=== 3-Round Debate ===\n\n"
+            f"[Bull R1 — Opening]\n{bull_r1}\n\n"
+            f"[Bear R2 — Attack]\n{bear_r2}\n\n"
+            f"[Bull R3 — Rebuttal]\n{bull_r3}\n\n"
+            f"=== Agent Votes ===\n{transcript}\n\n"
+            "Assess: did the bear expose fatal flaws, or did the bull defend successfully?\n"
             "Respond in EXACTLY this format (no extra text):\n"
             "DECISION: LONG|SHORT|HOLD\n"
             "CONFIDENCE: 0.50-0.95\n"
@@ -166,8 +224,9 @@ class DebateEngine:
         )
         full_transcript = (
             f"{transcript}\n\n"
-            f"[Bull] {bull_arg}\n"
-            f"[Bear] {bear_arg}\n"
+            f"[Bull R1] {bull_r1}\n"
+            f"[Bear R2] {bear_r2}\n"
+            f"[Bull R3] {bull_r3}\n"
             f"[Adjudicator] {text}"
         )
         return {
