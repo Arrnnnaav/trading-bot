@@ -1,3 +1,5 @@
+import logging
+
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 import pytz
@@ -45,7 +47,7 @@ class IndiaIntradayHarness(BaseHarness):
             OptionsOIAgent(broker),
         ]
         super().__init__(
-            state_path=config.india_progress_path,
+            state_path="data/india_intraday_progress.json",
             broker=broker,
             agents=agents,
             telegram_bot=telegram_bot,

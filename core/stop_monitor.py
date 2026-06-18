@@ -116,7 +116,11 @@ class StopMonitor:
             return
 
         close_side = "sell" if position.direction == Direction.LONG else "buy"
-        quantity = position.quantity or round(position.size_inr / current_price, 6)
+        quantity = (
+            position.quantity
+            if position.quantity is not None
+            else round(position.size_inr / current_price, 6)
+        )
         close_ticker = position.instrument_token or position.ticker.replace("/", "")
 
         # Step 1: broker close — if this fails, leave position in state and abort.

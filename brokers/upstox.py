@@ -90,7 +90,7 @@ class UpstoxBroker(BrokerBase):
         self, instrument: str, interval: str, from_date: str, to_date: str
     ) -> list:
         resp = _get(
-            f"{self.BASE_URL}/historical-candle/intraday/{instrument}/{interval}/{to_date}/{from_date}",
+            f"{self.BASE_URL}/historical-candle/intraday/{instrument}/{interval}/{from_date}/{to_date}",
             headers=self._headers,
         )
         return resp.json()["data"]["candles"]
@@ -118,7 +118,12 @@ class UpstoxBroker(BrokerBase):
         ]
 
     def get_options_chain(self, index: str, expiry: str) -> list[dict]:
-        token = "NSE_INDEX|Nifty 50" if index == "NIFTY" else "NSE_INDEX|Nifty Bank"
+        spec = self._INDEX_SPEC.get(index.upper())
+        if spec is None:
+            raise ValueError(
+                f"Unknown index '{index}'. Supported: {list(self._INDEX_SPEC)}"
+            )
+        token = spec["spot"]
         resp = _get(
             f"{self.BASE_URL}/option/chain",
             params={"instrument_key": token, "expiry_date": expiry},

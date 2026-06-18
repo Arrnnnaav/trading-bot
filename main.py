@@ -62,6 +62,12 @@ def build_components():
             if india_broker is None:
                 india_broker = india_positional_harness.broker
 
+    if india_broker is None and config.enable_india:
+        raise RuntimeError(
+            "ENABLE_INDIA=true but both ENABLE_INTRADAY and ENABLE_POSITIONAL are false. "
+            "Set at least one to true."
+        )
+
     telegram_bot = TelegramBot(
         harness_states=harness_states,
         upstox_broker=india_broker,

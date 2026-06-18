@@ -18,6 +18,13 @@ from core.models import Signal, Market, Direction, Position, SignalOutcome
 from core.json_store import write_json_atomic
 from config import config
 
+_TICKER_TO_INDEX = {
+    "NIFTY": "NIFTY",
+    "BANKNIFTY": "BANKNIFTY",
+    "SENSEX": "SENSEX",
+    "NIFTYIT": "NIFTYIT",
+}
+
 
 class TelegramBot:
     def __init__(self, harness_states: dict, upstox_broker, signal_aggregator):
@@ -165,10 +172,9 @@ class TelegramBot:
                 expiry = entry.get("expiry")
                 if not expiry and hasattr(broker, "resolve_options_expiry"):
                     expiry = broker.resolve_options_expiry()
+                index = _TICKER_TO_INDEX.get(ticker.upper(), ticker.upper())
                 result = broker.place_options_order(
-                    index="NIFTY"
-                    if "NIFTY" in ticker.upper() and "BANK" not in ticker.upper()
-                    else "BANKNIFTY",
+                    index=index,
                     direction=direction.value,
                     expiry=expiry,
                     size_inr=size_inr,
