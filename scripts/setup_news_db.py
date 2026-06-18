@@ -31,13 +31,14 @@ def setup_db(db_path: str = "data/news.db") -> None:
         """)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS news_articles_meta (
-                article_id   TEXT PRIMARY KEY,
+                id           TEXT PRIMARY KEY,
                 headline     TEXT NOT NULL,
                 body_snippet TEXT,
-                date         DATE NOT NULL,
+                date         TEXT NOT NULL,
                 source       TEXT NOT NULL,
                 url          TEXT,
-                event_id     TEXT REFERENCES market_events(event_id)
+                event_id     TEXT REFERENCES market_events(event_id),
+                tags         TEXT
             )
         """)
         conn.commit()

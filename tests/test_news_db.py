@@ -58,16 +58,65 @@ def test_creates_news_articles_meta_table():
             conn.close()
 
 
-def test_idempotent_run_twice():
+def test_news_articles_meta_columns():
     with tempfile.TemporaryDirectory() as tmp:
         db_path = str(Path(tmp) / "test_news.db")
         setup_db(db_path)
-        setup_db(db_path)  # must not raise
         conn = sqlite3.connect(db_path, check_same_thread=False)
         try:
-            count = conn.execute(
-                "SELECT COUNT(*) FROM sqlite_master WHERE type='table'"
-            ).fetchone()[0]
-            assert count == 2
+            cols = {
+                row[1] for row in conn.execute("PRAGMA table_info(news_articles_meta)")
+            }
+            expected = {
+                "id",
+                "headline",
+                "body_snippet",
+                "date",
+                "source",
+                "url",
+                "event_id",
+                "tags",
+            }
+            assert cols == expected, f"Column mismatch. Expected {expected}, got {cols}"
+        finally:
+            conn.close()
+
+
+def test_setup_db_idempotent():
+    with tempfile.TemporaryDirectory() as tmp:
+        db_path = str(Path(tmp) / "test_news.db")
+        setup_db(db_path)
+        # Verify schema before second run
+        conn = sqlite3.connect(db_path, check_same_thread=False)
+        try:
+            cols_before = {
+                row[1] for row in conn.execute("PRAGMA table_info(news_articles_meta)")
+            }
+        finally:
+            conn.close()
+
+        # Run setup again
+        setup_db(db_path)
+
+        # Verify schema is still intact
+        conn = sqlite3.connect(db_path, check_same_thread=False)
+        try:
+            cols_after = {
+                row[1] for row in conn.execute("PRAGMA table_info(news_articles_meta)")
+            }
+            assert cols_before == cols_after, "Schema changed after second run"
+            expected = {
+                "id",
+                "headline",
+                "body_snippet",
+                "date",
+                "source",
+                "url",
+                "event_id",
+                "tags",
+            }
+            assert cols_after == expected, (
+                f"Column mismatch. Expected {expected}, got {cols_after}"
+            )
         finally:
             conn.close()
