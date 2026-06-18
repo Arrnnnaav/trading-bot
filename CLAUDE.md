@@ -1,55 +1,75 @@
-# Trading Bot v1 — Project Context
+# Trading Bot v2 — India Index Options
 
 ## Before Making Any Changes
 
 A knowledge graph of this codebase exists at `graphify-out/graph.json` with an interactive view at `graphify-out/graph.html` and summary at `graphify-out/GRAPH_REPORT.md`.
 
-**Use it before touching code.** Run `/graphify query "<your question>"` or read `GRAPH_REPORT.md` to locate relevant nodes, dependencies, and affected components. Do NOT scan files one by one — the graph already maps every relationship. This reduces token usage and avoids missing cross-component impacts.
+**Use it before touching code.** Run `/graphify query "<your question>"` or read `GRAPH_REPORT.md` to locate relevant nodes, dependencies, and affected components. Do NOT scan files one by one — the graph already maps every relationship.
 
+Design spec for the v2 pivot: `docs/superpowers/specs/2026-06-18-india-trading-bot-design.md`
 
-## Status: IN PROGRESS (v2 overhaul, 2026-05-24)
+---
 
-Semi-automated crypto + Indian market trading bot. Generates BUY/SELL/HOLD signals → sends to Telegram with entry/target/stop/size → user taps EXECUTE → bot places order via broker API → stop-loss managed automatically in background.
+## Status: IN PROGRESS (v2 India pivot, 2026-06-18)
+
+Full pivot from crypto+India to **India-only index options trading**. Crypto components are being removed. Architecture (BaseHarness, DebateEngine, RiskManager, SignalAggregator, StopMonitor, TelegramBot, Dashboard) is preserved.
+
+---
+
+## What This Bot Does
+
+Semi-automated Indian index options trading bot. Generates BUY/SELL/HOLD signals → sends to Telegram with entry/target/stop/size → user taps EXECUTE → bot places options order via Upstox → stop-loss managed automatically.
+
+**Instruments:** Nifty 50, Bank Nifty, Sensex, Nifty IT (index options only)  
+**Execution:** Semi-auto (Telegram confirm) until bot is proven, then fully auto  
+**Broker:** Upstox (Zerodha Kite added later on instruction)
+
+---
+
+## Index Options — Critical Lot Sizes
+
+> SEBI revises these periodically. **Verify at NSE before live trading.**
+> Last verified: 2026-06-18
+
+| Index | Lot Size | Strike Step | Spot Token |
+|-------|----------|-------------|------------|
+| Nifty 50 | **65** | 50 | `NSE_INDEX\|Nifty 50` |
+| Bank Nifty | **30** | 100 | `NSE_INDEX\|Nifty Bank` |
+| Sensex | **20** | 100 | `BSE_INDEX\|SENSEX` |
+| Nifty IT | **35** | 50 | `NSE_INDEX\|Nifty IT` |
 
 ---
 
 ## Architecture at a Glance
 
 ```
-CoinDCX OHLCV  →  CryptoHarness (every 15min)   →┐
-Upstox OHLCV   →  IndiaHarness  (9:00/11:30/14:45 IST weekdays) →┤
-                                                   ↓
-                         3+ parallel agents → DebateEngine → RiskManager
-                                                   ↓
-                         SignalAggregator → TelegramBot → Broker APIs
-                                                   ↓
-                         signal_log.json ← SignalTracker (every 15min)
-                         StopMonitor runs every 5min in background
-                         FastAPI dashboard at http://localhost:5000
+yfinance (25yr historical) → training pipeline
+Upstox OHLCV (live 15m/daily) → IndiaIntradayHarness (9:20/10:15/11:30/13:00/14:00 IST)
+                              → IndiaPositionalHarness (9:20 IST daily)
+                                         ↓
+                    6 agents → DebateEngine → RiskManager
+                                         ↓
+               SignalAggregator → TelegramBot → UpstoxBroker
+                                         ↓
+               signal_log.json ← SignalTracker (every 15min)
+               StopMonitor runs every 5min (+ hard exit at 15:15 IST intraday)
+               FastAPI dashboard at http://localhost:5000
 ```
-
-**Two markets, two harnesses, one shared aggregator.**
 
 ---
 
 ## How to Run
 
 ```bash
-# 1. Set up env (once)
 python -m venv .venv
-.venv\Scripts\activate        # Windows
+.venv\Scripts\activate
 pip install -r requirements.txt
-
-# 2. Fill in API keys
 cp .env.example .env
-# Edit .env — all keys required before running
-
-# 3. Start
+# Fill .env — all keys required
 python main.py
 ```
 
-Dashboard: `http://localhost:5000`  
-Telegram: bot starts polling immediately on run.
+Dashboard: `http://localhost:5000`
 
 ---
 
@@ -57,258 +77,235 @@ Telegram: bot starts polling immediately on run.
 
 ```
 trading-bot/
-├── main.py                  — entry point; wires all components; asyncio event loop
-├── config.py                — Config dataclass; reads from env vars; config = Config() singleton
+├── main.py                      — entry point; wires all components; asyncio event loop
+├── config.py                    — Config dataclass; reads env vars; config = Config() singleton
 │
 ├── agents/
-│   ├── base.py              — abstract BaseAgent; analyze(ticker, klines, market, **kwargs) -> AgentVote
-│   ├── chronos_technical.py — ChronosTechnicalAgent; Chronos-2 (amazon/chronos-t5-small) fine-tuned
-│   │                          classifier; loads v2 model first, falls back to v1
-│   │                          REPLACING: kronos_technical.py (Kronos package doesn't exist)
-│   ├── macro_crypto.py      — MacroCryptoAgent; Fear&Greed index + BTC dominance; 15-min TTL cache
-│   │                          FG 0-24=HOLD, 25-44=SHORT, 45-55=HOLD, 56-74=LONG, 75+=SHORT(contrarian)
-│   ├── news_sentiment.py    — NewsSentimentAgent(api_key); CryptoPanic API; score>0.2 LONG, <-0.2 SHORT
-│   ├── onchain.py           — OnChainAgent(api_key); CoinGlass funding rate + long/short ratio
-│   ├── fundamentals.py      — FundamentalsAgent(); NSE India API; delivery%/P-E signals
-│   ├── fii_dii.py           — FIIDIIAgent(); NSE net institutional flow; >500Cr LONG, <-500Cr SHORT
-│   └── options_oi.py        — OptionsOIAgent(upstox_broker); PCR + max pain from options chain
+│   ├── base.py                  — abstract BaseAgent; analyze(ticker, klines, market) -> AgentVote
+│   ├── technical_india.py       — TechnicalIndiaAgent; RSI/MACD/BB/VWAP/EMA + S/R zones + Kronos-base
+│   ├── options_chain.py         — OptionsChainAgent; PCR, max pain, OI skew, IV percentile, unusual OI
+│   ├── news_analogue.py         — NewsAnalogueAgent; ChromaDB semantic match → historical regime vote
+│   ├── fii_dii.py               — FIIDIIAgent; nsefin daily flows + 5d rolling trend + DII/FII divergence
+│   ├── macro_india.py           — MacroIndiaAgent; India VIX, SGX Nifty gap, USD/INR, RBI calendar
+│   ├── kronos_india.py          — KronosAgent; NeoQuasar/Kronos-base fine-tuned on NSE data (positional only)
+│   └── fundamentals.py          — FundamentalsAgent; NSE India API (kept for sector context)
 │
 ├── brokers/
-│   ├── base_broker.py       — abstract BrokerBase; get_price/place_order/close_position/get_ohlcv
-│   ├── coindcx.py           — CoinDCXBroker; HMAC-SHA256 signed requests; market/limit orders
-│   ├── upstox.py            — UpstoxBroker; Bearer token; options-only (place_order raises NotImplementedError)
-│   │                          ATM strike = round(spot/50)*50; place_options_order() handles F&O
-│   └── paper_broker.py      — PaperBroker(real_broker); intercepts place_order/place_options_order;
-│                              logs to data/paper_trades.json; get_price/get_ohlcv pass through live
+│   ├── base_broker.py           — abstract BrokerBase
+│   ├── upstox.py                — UpstoxBroker; all 4 indices; lot sizes in _INDEX_SPEC dict
+│   └── paper_broker.py          — PaperBroker wrapper; intercepts orders; logs to data/paper_trades.json
 │
 ├── core/
-│   ├── models.py            — Pydantic v2 models: Market/Direction/SignalOutcome enums,
-│   │                          AgentVote, Signal (rr_ratio @computed_field), Position, HarnessState
-│   │                          Price fields have Field(gt=0.0) constraint
-│   ├── debate_engine.py     — DebateEngine; bull/bear adversarial debate (haiku researchers → Opus
-│   │                          adjudicator); votes filtered at confidence>=0.50; consensus needs
-│   │                          >=2 agreeing agents AND avg_confidence>=config.min_confidence (0.65)
-│   ├── agent_tracker.py     — AgentPerformanceTracker; reads signal_log.json; per-agent win rates
-│   │                          → vote weights [0.5–2.0]; MIN_SAMPLES=20 before weighting kicks in
-│   ├── pattern_reputation.py — PatternReputationTracker; fingerprints signal setups (direction +
-│   │                          ticker_group + agreeing agents); blocks patterns with <40% win rate
-│   │                          after 10+ samples
-│   ├── risk_manager.py      — RiskManager(market); ATR-based stops: 2×ATR crypto, 1.5×ATR India
-│   │                          target = entry + 1.8 * mult * ATR; approve() returns (bool, reason)
-│   ├── signal_aggregator.py — SignalAggregator; persists to signal_log.json; 4hr dedup window
-│   │                          update_signal_outcome() tracks all signals even unexecuted ones
-│   ├── signal_tracker.py    — SignalTracker(aggregator, crypto_broker, india_broker)
-│   │                          run_forever(900); resolves PENDING signals: TARGET_HIT/STOP_HIT/EXPIRED
-│   │                          crypto: 24hr expiry; india: 3 trading day expiry
-│   └── stop_monitor.py      — StopMonitor(crypto_broker, india_broker, harness_states, telegram_bot)
-│                              run_forever(300); checks open positions; executes close + Telegram notify
+│   ├── models.py                — Pydantic v2: Market/Direction/SignalOutcome, AgentVote, Signal, Position
+│   ├── debate_engine.py         — DebateEngine; haiku researchers → opus adjudicator
+│   ├── agent_tracker.py         — per-agent win rates → vote weights [0.5–2.0]
+│   ├── pattern_reputation.py    — signal pattern fingerprinting + win rate gate (<40% blocks)
+│   ├── risk_manager.py          — ATR stops; approve() gates incl. VIX gate (>25 blocks all)
+│   ├── signal_aggregator.py     — atomic JSON log; 4hr dedup window (2hr intraday)
+│   ├── signal_tracker.py        — resolves PENDING signals: TARGET_HIT/STOP_HIT/EXPIRED
+│   ├── stop_monitor.py          — every 5min; closes positions; 15:15 IST hard exit for intraday
+│   ├── json_store.py            — write_json_atomic(); read_json(); thread-safe file I/O
+│   └── llm_client.py            — ClaudeCodeClient; used by DebateEngine + BaseHarness learnings
 │
 ├── harnesses/
-│   ├── base_harness.py      — BaseHarness; run_session() orchestrates vote→consensus→approve→log→telegram
-│   │                          update_learnings() every 10 sessions via claude-haiku; prepends to agent prompts
-│   ├── crypto_harness.py    — CryptoHarness; tickers: BTC/ETH/SOL/BNB/XRP; APScheduler interval 15min
-│   └── india_harness.py     — IndiaHarness; tickers: Nifty50/NiftyBank/HDFC/Infosys/Reliance
-│                              CronTrigger 09:00,11:30,14:45 IST mon-fri
-│                              NEXT_WEEKLY_EXPIRY hardcoded — UPDATE EVERY FRIDAY
+│   ├── base_harness.py          — BaseHarness; run_session() → vote→consensus→approve→log→telegram
+│   │                              update_learnings() every 10 sessions via claude-haiku
+│   ├── india_intraday_harness.py — 9:20/10:15/11:30/13:00/14:00 IST; 15m candles; 4 agents
+│   └── india_positional_harness.py — 9:20 IST daily; daily candles; 6 agents incl. Kronos
 │
 ├── tg_bot/
-│   └── bot.py               — TelegramBot; 3-button inline keyboard: EXECUTE / SKIP / DEBATE
-│                              EXECUTE: India→place_options_order, Crypto→place_order
-│                              Package named tg_bot/ (NOT telegram/) — avoids conflict with library
+│   └── bot.py                   — TelegramBot; EXECUTE/SKIP/DEBATE buttons; user auth via TELEGRAM_ALLOWED_USER_IDS
+│                                  Package named tg_bot/ (NOT telegram/) — avoids python-telegram-bot conflict
 │
 ├── dashboard/
-│   ├── server.py            — FastAPI; REST + WebSocket (/ws/signals); broadcast_signal() for live feed
-│   │                          /api/signals  /api/performance  /api/open-positions
-│   └── static/
-│       ├── index.html       — live signal feed (WebSocket)
-│       ├── history.html     — filterable signal history table
-│       ├── performance.html — Chart.js portfolio curves; win rate; agent breakdown
-│       └── positions.html   — open positions with 30s auto-refresh
+│   ├── server.py                — FastAPI; REST + WebSocket; binds 127.0.0.1 by default
+│   └── static/                  — index.html, history.html, performance.html, positions.html
 │
 ├── training/
-│   ├── dataset.py           — load_all_tickers(); 80/10/10 temporal split; window=96 bars; label=LONG/SHORT/HOLD
-│   ├── focal_loss.py        — FocalLoss(gamma, weight); (1-pt)^gamma * CE; handles class imbalance
-│   ├── model_v2.py          — ChronosClassifierV2; attention pooling + residual head + learnable temperature
-│   ├── train_v2.py          — 2-phase training: Phase1 frozen encoder + WeightedRandomSampler + gamma=1.5;
-│   │                          Phase2 full fine-tune + gamma=2.0 + grad accum=4
-│   │                          Run: python -m training.train_v2
-│   └── monitor.py           — offline log parser; detects HOLD/SHORT collapse, overfitting, underfitting
+│   ├── train_kronos_india.py    — 2-phase Kronos fine-tune on NSE data; saves models/kronos_india/best.pt
+│   ├── train_xgb_india.py       — LightGBM training; Optuna HPO; saves models/xgb_india/model.pkl
+│   ├── india_features.py        — feature engineering: RSI/MACD/BB/EMA/VWAP/VIX/FII/PCR/S-R distance
+│   ├── walk_forward.py          — expanding-window OOS validation; gate: Sharpe >1.0 all OOS years
+│   ├── label_data.py            — LONG/SHORT/HOLD labels; 10-day forward window; focal loss balanced
+│   ├── focal_loss.py            — FocalLoss(gamma, weight) for class imbalance
+│   └── dataset.py               — loads parquet files; temporal 80/10/10 split
+│
+├── backtesting/
+│   └── india_backtest.py        — walk-forward backtest; STT/brokerage costs; options decay model
+│                                  Gate for live: Sharpe >1.5, maxDD <15%, win rate >45%
+│
+├── scripts/
+│   ├── fetch_historical.py      — one-time yfinance download: ^NSEI/^NSEBANK/^BSESN/^CNXIT from 2000
+│   ├── backfill_news.py         — populate ChromaDB + news.db with historical events
+│   └── retrain.py               — trigger retraining: XGBoost weekly, Kronos quarterly
 │
 ├── models/
-│   ├── chronos_crypto_v2/   — v2 checkpoint (training in progress); best.pt saved on each F1 improvement
-│   └── chronos_crypto/      — v1 checkpoint (fallback); macro_F1≈0.35
+│   ├── kronos_india/            — fine-tuned Kronos checkpoint; best.pt
+│   └── xgb_india/               — LightGBM model; model.pkl
 │
 ├── data/
-│   ├── crypto_progress.json — harness state: session_count, portfolio_value_inr, open_positions, agent_learnings
-│   ├── india_progress.json  — same structure for India market
-│   ├── signal_log.json      — every signal ever generated + outcome (source of truth for dashboard)
-│   └── paper_trades.json    — paper trading order log (created when PAPER_TRADING=true)
+│   ├── historical/              — {index}_daily.parquet (25yr OHLCV, yfinance)
+│   ├── fii_dii/                 — YYYY-MM-DD.json (daily FII/DII flows, nsefin)
+│   ├── news/                    — YYYY-MM-DD.jsonl (raw news articles, append-only)
+│   ├── chroma/                  — ChromaDB vector store (news embeddings)
+│   ├── news.db                  — SQLite: market_events + linked news
+│   ├── india_progress.json      — harness state: session_count, portfolio_value, open_positions
+│   ├── signal_log.json          — all signals + outcomes (source of truth for dashboard)
+│   └── paper_trades.json        — paper trading order log
 │
-├── docs/
-│   ├── 2026-05-23-trading-bot-design.md  — full design spec
-│   └── 2026-05-23-trading-bot.md         — implementation plan (14 tasks, all complete)
-│
-├── tests/                   — tests (some stale — see In-Progress section below)
-│   ├── test_models.py        (4)   — Signal/Position/HarnessState validation
-│   ├── test_brokers.py       (5)   — CoinDCX/Upstox HMAC signing, ATM strike calc
-│   ├── test_agents.py        (2)   — ChronosTechnical v1/v2 load + fallback
-│   ├── test_debate_engine.py (6)   — consensus rules; adversarial debate; parse_adjudication
-│   ├── test_macro_crypto.py  (8)   — F&G signal logic; BTC dom penalty; cache; API failure
-│   ├── test_signal_aggregator.py (4) — dedup window; outcome update; persistence
-│   ├── test_signal_tracker.py (4) — TARGET_HIT/STOP_HIT/EXPIRED resolution
-│   └── test_stop_monitor.py  (3)  — long/short close conditions
-│
+├── tests/                       — pytest suite (119 tests passing as of 2026-06-18)
 ├── requirements.txt
-├── .env.example             — all required env var keys
-├── .gitignore               — excludes data/*.json, .env, pycache, venv
-└── CLAUDE.md                — this file
+├── .env.example
+└── CLAUDE.md                    — this file
 ```
 
 ---
 
-## Overhaul In Progress (2026-05-24)
+## Agents Per Harness
 
-### What's done
-- `agents/chronos_technical.py` — Chronos-2 replaces fake Kronos; loads v2 model, falls back to v1
-- `agents/macro_crypto.py` — Fear & Greed + BTC dominance macro agent (new)
-- `core/debate_engine.py` — bull/bear adversarial debate added; haiku researchers + Opus adjudicator
-- `core/agent_tracker.py` — per-agent win rate → vote weights (new)
-- `core/pattern_reputation.py` — signal pattern fingerprinting + win rate gate (new)
-- `brokers/paper_broker.py` — paper trading broker wrapper (new)
-- `config.py` — added `PAPER_TRADING`, `STRATEGY_PROFILE`, `paper_trades_path`
-- `training/` — full Chronos-2 fine-tuning pipeline (focal loss, v2 architecture, balanced sampler)
+| Agent | Intraday (15m) | Positional (daily) |
+|-------|---------------|-------------------|
+| TechnicalIndiaAgent | ✅ primary | ✅ primary |
+| OptionsChainAgent | ✅ primary | ✅ secondary |
+| NewsAnalogueAgent | ✅ filter | ✅ primary |
+| MacroIndiaAgent | ✅ primary | ✅ secondary |
+| FIIDIIAgent | ❌ daily data only | ✅ primary |
+| KronosAgent | ❌ too slow | ✅ primary |
 
-### What's still needed (not wired yet)
-- `core/debate_engine.py` — use `agent_tracker` weights when averaging confidence
-- `core/risk_manager.py` — gate signals through `pattern_reputation.is_pattern_allowed()`
-- `harnesses/base_harness.py` — instantiate AgentPerformanceTracker + PatternReputationTracker; refresh on each session
-- `harnesses/crypto_harness.py` — wrap broker in PaperBroker when `config.paper_trading`
-- `main.py` — print paper mode status on startup
-- `tg_bot/bot.py` — prefix signal messages with `[PAPER]` when paper trading
-- Tests for `agent_tracker`, `pattern_reputation`, `paper_broker`
+Consensus: ≥2 agents agree + avg confidence ≥0.65
 
-### Model training status (2026-05-24)
-Training `models/chronos_crypto_v2/` — v2 run 3 in progress:
-- Fix applied: WeightedRandomSampler (equal LONG/SHORT/HOLD per batch) + gamma=1.5 Phase 1
-- Previous runs: HOLD collapse (run 2), SHORT collapse (run 1)
-- Check log: `models/chronos_crypto_v2/train_log.txt`
-- Run manually: `python -m training.train_v2`
-- **Do NOT add a monitor or loop** — check log directly when needed
+---
+
+## Risk Gates (all active)
+
+| Gate | Threshold |
+|------|-----------|
+| Max open positions | 3 per market |
+| Daily loss | ≤2% portfolio |
+| Weekly loss | ≤5% portfolio |
+| Consecutive losses | ≤3 |
+| Min R:R | 1.8 |
+| Min confidence | 0.65 |
+| India VIX | Reject all if >25 |
+| Expiry proximity | Reject intraday if <2hr to expiry |
+| Intraday hard exit | 15:15 IST (StopMonitor) |
+
+---
+
+## Trading Parameters
+
+| Parameter | Value |
+|-----------|-------|
+| Max portfolio % per trade | 2% |
+| Max risk % per trade (stop sizing) | 0.5% |
+| Options stop | 35% premium drop |
+| Options target | 100% premium (doubles) |
+| Intraday hold | Same day, hard exit 15:15 |
+| Positional hold | Max 5 trading days |
+| Intraday options | Weekly expiry, ATM |
+| Positional options | Monthly expiry, 1 strike OTM |
+
+---
+
+## LLM Models Used
+
+| Component | Model |
+|-----------|-------|
+| Debate — consensus adjudicator | `claude-opus-4-7` |
+| Debate — per-agent researchers | `claude-haiku-4-5-20251001` |
+| Agent learnings summarizer | `claude-haiku-4-5-20251001` |
 
 ---
 
 ## Key Design Decisions & Gotchas
 
 ### 1. Package naming: `tg_bot/` not `telegram/`
-The folder is `tg_bot/` because a folder named `telegram/` shadows the python-telegram-bot library.  
+Folder named `tg_bot/` because `telegram/` shadows the python-telegram-bot library.
 **Always import as:** `from tg_bot.bot import TelegramBot`
 
-### 2. Harnesses own their brokers
-`CryptoHarness` creates `CoinDCXBroker` internally. `IndiaHarness` creates `UpstoxBroker` internally.  
-`main.py` accesses them via `crypto_harness.broker` and `india_harness.broker`.  
-This is intentional — harnesses are self-contained units.
+### 2. Two harnesses, one Market enum
+Both `IndiaIntradayHarness` and `IndiaPositionalHarness` use `Market.INDIA`. They share one position cap (max 3 total India positions across both harnesses). `main.py` tracks combined `harness_states[Market.INDIA]`.
 
-### 3. TelegramBot chicken-and-egg solved
-`TelegramBot` needs `harness_states`, which only exist after harnesses are created.  
-Harnesses need `telegram_bot` to send signals.  
-**Solution in `build_components()`:** Create harnesses with `telegram_bot=None`, build TelegramBot with live harness_states dict, inject `telegram_bot` back into harnesses.
+### 3. Lot sizes are in `_INDEX_SPEC` dict — not hardcoded
+`brokers/upstox.py` has a single `_INDEX_SPEC` class dict with lot size, strike step, exchange token per index. Update this dict when SEBI revises — never hardcode lot sizes elsewhere.
 
-### 4. Shutdown: background tasks cancelled explicitly
-`tracker.run_forever()` and `monitor.run_forever()` are infinite loops. On shutdown, `main.py` calls `.cancel()` on each `asyncio.Task`. The telegram polling thread (`asyncio.to_thread(run_polling)`) cannot be cancelled cross-thread — it finishes when the process exits. This is a known limitation of python-telegram-bot v20 sync polling.
+### 4. Intraday hard exit
+`StopMonitor.run_once()` checks 15:15 IST and force-closes all intraday positions regardless of P&L. This prevents overnight options risk from day-trading positions.
 
-### 5. India harness uses options ONLY
-`UpstoxBroker.place_order()` raises `NotImplementedError`. All India trades go through `place_options_order()` which auto-selects ATM strike (nearest 50 for Nifty, 100 for BankNifty).  
-LONG signal → ATM Call. SHORT signal → ATM Put.  
-Options stop: exit if premium drops 40%. Target: exit if premium doubles or EOD.
+### 5. VIX gate is in RiskManager
+`RiskManager.approve()` checks India VIX via `MacroIndiaAgent` cached value. Above 25 = reject all new signals. This is a hard gate, not a confidence penalty.
 
-### 6. Signal outcome tracking is always-on
-Every signal is logged in `signal_log.json` regardless of whether the user executes it.  
-`SignalTracker` resolves outcomes for ALL signals — executed and skipped alike.  
-This feeds the `/performance` dashboard's "hypothetical P&L" curve.
+### 6. ChromaDB is local
+`data/chroma/` is a local ChromaDB instance — no server needed. Persistence is automatic. On first run, `scripts/backfill_news.py` must be run to populate historical events.
 
-### 7. Consensus threshold
-`DebateEngine.reach_consensus()`:
-- Filters out agents with confidence < 0.50
-- Requires ≥ 2 agents agreeing on direction
-- Requires average confidence of agreeing agents ≥ 0.65 (`config.min_confidence`)
-- Below threshold → returns `Direction.HOLD`, no Telegram message sent
+### 7. Kronos is positional-only
+`NeoQuasar/Kronos-base` inference takes 2–5 seconds per prediction. Too slow for intraday. `KronosAgent` only runs in `IndiaPositionalHarness`.
 
-### 8. Agent learnings loop
-Every 10 sessions, `BaseHarness.update_learnings()` calls `claude-haiku-4-5-20251001` to summarize last 50 signal outcomes into a 3-sentence learning note. Stored in `progress.json["agent_learnings"]`, prepended to each agent's system prompt next session.
+### 8. Upstox token refresh
+Upstox access tokens expire daily. Current code reads `UPSTOX_ACCESS_TOKEN` from env at startup. For production: implement OAuth2 refresh in `brokers/upstox.py` (v2 priority).
 
-### 9. Dashboard reads from file, not memory
-`dashboard/server.py` creates its own `SignalAggregator` instance but calls `_load_log()` (reads JSON file) on every request. No in-memory state — always fresh from disk.
+### 9. Zerodha Kite — not yet wired
+Zerodha is the planned primary broker. Integration begins only when user instructs. Will be added as `brokers/zerodha.py` behind existing `BrokerBase` interface. `kiteconnect` Python SDK.
+
+### 10. Sensex uses BSE exchange tokens
+Sensex options trade on BSE (`BSE_FO|` prefix), not NSE. Upstox supports BSE F&O. Token format differs from NSE indices — handled in `_INDEX_SPEC`.
 
 ---
 
 ## What Needs to Happen Before Going Live
 
-### Weekly (every Friday before market close)
-Update `NEXT_WEEKLY_EXPIRY` in `harnesses/india_harness.py:23`:
-```python
-NEXT_WEEKLY_EXPIRY = "2026-05-29"  # change this to next Thursday's date
+### One-time setup
+1. Run `scripts/fetch_historical.py` — downloads 25yr OHLCV (takes ~5 min)
+2. Run `scripts/backfill_news.py` — populates ChromaDB + news.db (~30 min)
+3. Train models: `python -m training.train_kronos_india` + `python -m training.train_xgb_india`
+4. Run `training/walk_forward.py` — validate both models (Sharpe >1.0 gate)
+5. Run `backtesting/india_backtest.py` — validate strategy (Sharpe >1.5, maxDD <15% gate)
+6. Fill all keys in `.env`
+7. Set `TELEGRAM_ALLOWED_USER_IDS` to your Telegram user ID
+8. Paper trade ≥4 weeks, verify signal quality, then flip to live
+
+### Weekly (every Thursday before close)
+Update `INDIA_OPTIONS_EXPIRY` in `.env` to next Thursday's date, OR leave blank to use `_next_weekly_expiry()` auto-calculation.
+
+### Environment variables required
+```
+TELEGRAM_TOKEN
+TELEGRAM_CRYPTO_CHAT_ID      # rename to TELEGRAM_INDIA_CHAT_ID in next cleanup
+TELEGRAM_INDIA_CHAT_ID
+TELEGRAM_ALLOWED_USER_IDS    # comma-separated Telegram user IDs (security)
+UPSTOX_API_KEY
+UPSTOX_ACCESS_TOKEN          # expires daily — refresh manually until OAuth2 implemented
+MARKETAUX_API_KEY             # free tier, 100 req/day
+PAPER_TRADING=true            # keep true until models validated
+ENABLE_INTRADAY=true
+ENABLE_POSITIONAL=true
 ```
 
-### Before first run
-1. Fill all keys in `.env` — bot will start but all broker/API calls will fail silently without them
-2. Create Telegram bot via @BotFather, get token, create two channels (`#crypto-signals`, `#india-signals`), get channel IDs
-3. Upstox: generate access token (expires daily — needs refresh mechanism for production, currently manual)
-4. Verify CoinGlass free tier: 10 req/min — crypto harness runs every 15min across 5 tickers, this is fine
-
-### Upstox token refresh (v2 priority)
-Upstox access tokens expire daily. Current code reads `UPSTOX_ACCESS_TOKEN` from env at startup.  
-For production: implement OAuth2 refresh flow in `brokers/upstox.py`.
-
 ---
 
-## LLM Models Used
+## v2 Build Phases (in order)
 
-| Component | Model | Why |
-|-----------|-------|-----|
-| Debate engine — consensus reasoning | `claude-opus-4-7` | Needs strongest reasoning for final signal decision |
-| Analysis agents — per-agent reasoning | `claude-haiku-4-5-20251001` | High frequency (every 15min × 5 tickers × 3 agents), needs to be fast/cheap |
-| Agent learnings summarizer | `claude-haiku-4-5-20251001` | Runs every 10 sessions, straightforward summarization |
-
----
-
-## Trading Parameters (all in `config.py`)
-
-| Parameter | Value | Meaning |
-|-----------|-------|---------|
-| `min_confidence` | 0.65 | Minimum avg confidence across agreeing agents to publish signal |
-| `max_portfolio_pct_per_trade` | 2% | Max portfolio at risk per trade |
-| `max_open_positions_per_market` | 3 | Hard cap: no new signal if 3 open in same market |
-| `min_rr_ratio` | 1.8 | Minimum risk:reward required to publish |
-| `options_stop_pct` | 40% | Exit options if premium drops 40% from entry |
-| `options_target_pct` | 100% | Exit options if premium doubles |
-| Crypto stop ATR mult | 2.0 | stop = entry − 2×ATR |
-| India stop ATR mult | 1.5 | stop = entry − 1.5×ATR |
+| Phase | Status | Description |
+|-------|--------|-------------|
+| 0 | ✅ Done | Architecture hardening (atomic writes, retries, logging, tests — 119 passing) |
+| 1 | 🔲 Next | Crypto removal + India data pipeline + new harness structure |
+| 2 | 🔲 | 6 new/upgraded agents |
+| 3 | 🔲 | Kronos + XGBoost training on Indian data |
+| 4 | 🔲 | News intelligence (ChromaDB + historical analogues) |
+| 5 | 🔲 | Backtesting + walk-forward validation |
 
 ---
 
 ## Running Tests
 
 ```bash
-cd D:\trading-bot
-python -m pytest tests/ -v
-# Expected: 25 passed
+python -m pytest tests/ -v --basetemp=.pytest-tmp
+# Expected: 119 passed (as of 2026-06-18)
 ```
-
----
-
-## V2 Ideas (out of scope for v1)
-
-- Upstox OAuth2 daily token refresh (currently manual)
-- Dynamic expiry fetching (instead of hardcoded `NEXT_WEEKLY_EXPIRY`)
-- Fully automated execution without Telegram confirmation (after validating signal quality)
-- Trailing stop-loss (StopMonitor currently uses fixed stop)
-- Backtesting harness using `signal_log.json` history
-- US market screener (separate tool, separate repo)
-- Mobile app (currently: Telegram + web dashboard)
 
 ---
 
 ## Related Docs
 
-- `docs/2026-05-23-trading-bot-design.md` — full design spec with all decisions
-- `docs/2026-05-23-trading-bot.md` — 14-task implementation plan (all tasks complete)
+- `docs/superpowers/specs/2026-06-18-india-trading-bot-design.md` — full v2 design spec
+- `docs/2026-05-23-trading-bot-design.md` — original v1 design (historical reference)
