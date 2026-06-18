@@ -6,7 +6,7 @@ from pathlib import Path
 from pydantic import ValidationError
 from core.llm_client import ClaudeCodeClient
 from core.json_store import read_json, write_json_atomic
-from core.models import HarnessState, Direction
+from core.models import HarnessState, Direction, Position
 from core.debate_engine import DebateEngine
 from core.risk_manager import RiskManager
 from core.signal_aggregator import SignalAggregator
@@ -106,8 +106,40 @@ class BaseHarness:
         self.state.session_count += 1
         self._save_state()
 
-        if self.telegram_bot is not None:
-            await self.telegram_bot.send_signal(signal)
+        # Auto-execute: paper broker intercepts, logs to data/paper_trades.json.
+        try:
+            expiry = (
+                self.broker.resolve_options_expiry()
+                if hasattr(self.broker, "resolve_options_expiry")
+                else None
+            )
+            order = self.broker.place_options_order(
+                index=signal.ticker,
+                direction=signal.direction.value,
+                expiry=expiry,
+                size_inr=signal.position_size_inr,
+            )
+            self.aggregator.mark_signal_executed(signal.id)
+            pos = Position(
+                signal_id=signal.id,
+                ticker=signal.ticker,
+                market=self.MARKET,
+                direction=signal.direction,
+                entry_price=signal.entry_price,
+                stop_price=signal.stop_price,
+                target_price=signal.target_price,
+                size_inr=signal.position_size_inr,
+                quantity=order.get("quantity"),
+                opened_at=datetime.now(timezone.utc).isoformat(),
+                broker_order_id=order.get("order_id", ""),
+                strike=order.get("strike"),
+                expiry=order.get("expiry"),
+                option_type="CE" if signal.direction == Direction.LONG else "PE",
+            )
+            self.state.open_positions.append(pos)
+            self._save_state()
+        except Exception as exc:
+            _LOG.warning("Auto-execute failed for %s: %s", signal.id, exc)
         return signal
 
     async def update_learnings(self):
