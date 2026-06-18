@@ -8,7 +8,6 @@ from agents.technical_india import TechnicalIndiaAgent
 from agents.options_chain import OptionsChainAgent
 from agents.macro_india import MacroIndiaAgent
 from agents.news_analogue import NewsAnalogueAgent
-from brokers.upstox import UpstoxBroker
 from brokers.paper_broker import PaperBroker
 from config import config
 from core.models import Market
@@ -19,23 +18,36 @@ IST = pytz.timezone("Asia/Kolkata")
 
 TICKERS = ["NIFTY", "BANKNIFTY", "SENSEX", "NIFTYIT"]
 
-# Instrument tokens for live price + OHLCV fetching
+# Instrument tokens for live price + OHLCV fetching (Zerodha integer tokens)
 TICKER_TOKENS = {
-    "NIFTY": "NSE_INDEX|Nifty 50",
-    "BANKNIFTY": "NSE_INDEX|Nifty Bank",
-    "SENSEX": "BSE_INDEX|SENSEX",
-    "NIFTYIT": "NSE_INDEX|Nifty IT",
+    "NIFTY": 256265,
+    "BANKNIFTY": 260105,
+    "SENSEX": 1,
+    "NIFTYIT": 259849,
 }
+
+
+def _build_raw_broker():
+    if config.zerodha_api_key and config.zerodha_access_token:
+        from brokers.zerodha import ZerodhaBroker
+
+        return ZerodhaBroker(
+            api_key=config.zerodha_api_key,
+            access_token=config.zerodha_access_token,
+        )
+    from brokers.upstox import UpstoxBroker
+
+    return UpstoxBroker(
+        api_key=config.upstox_api_key,
+        access_token=config.upstox_access_token,
+    )
 
 
 class IndiaIntradayHarness(BaseHarness):
     MARKET = Market.INDIA
 
     def __init__(self, telegram_bot, signal_aggregator: SignalAggregator):
-        _broker = UpstoxBroker(
-            api_key=config.upstox_api_key,
-            access_token=config.upstox_access_token,
-        )
+        _broker = _build_raw_broker()
         broker = (
             PaperBroker(_broker, config.paper_trades_path)
             if config.paper_trading

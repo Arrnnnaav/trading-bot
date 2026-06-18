@@ -12,7 +12,10 @@ class Config:
     telegram_india_chat_id: str = os.environ.get("TELEGRAM_INDIA_CHAT_ID", "")
     telegram_allowed_user_ids: str = os.environ.get("TELEGRAM_ALLOWED_USER_IDS", "")
 
-    # Brokers
+    # Brokers — Zerodha (primary) + Upstox (secondary)
+    zerodha_api_key: str = os.environ.get("ZERODHA_API_KEY", "")
+    zerodha_api_secret: str = os.environ.get("ZERODHA_API_SECRET", "")
+    zerodha_access_token: str = os.environ.get("ZERODHA_ACCESS_TOKEN", "")
     upstox_api_key: str = os.environ.get("UPSTOX_API_KEY", "")
     upstox_access_token: str = os.environ.get("UPSTOX_ACCESS_TOKEN", "")
 
@@ -100,12 +103,14 @@ class Config:
             errors.append(
                 "TELEGRAM_ALLOWED_USER_IDS is required when ENABLE_INDIA=true"
             )
-        if self.enable_india and not self.paper_trading and not self.upstox_api_key:
-            errors.append(
-                "UPSTOX_API_KEY is required when ENABLE_INDIA=true and PAPER_TRADING=false"
-            )
-        if not self.paper_trading and not self.upstox_access_token:
-            errors.append("UPSTOX_ACCESS_TOKEN is required when PAPER_TRADING=false")
+        if self.enable_india and not self.paper_trading:
+            has_zerodha = self.zerodha_api_key and self.zerodha_access_token
+            has_upstox = self.upstox_api_key and self.upstox_access_token
+            if not has_zerodha and not has_upstox:
+                errors.append(
+                    "Live trading requires either ZERODHA_API_KEY+ZERODHA_ACCESS_TOKEN "
+                    "or UPSTOX_API_KEY+UPSTOX_ACCESS_TOKEN"
+                )
         if self.dashboard_host == "0.0.0.0" and not self.paper_trading:
             errors.append("Refuse to bind dashboard to 0.0.0.0 in live mode")
         return errors

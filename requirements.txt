@@ -6,6 +6,7 @@ uvicorn==0.29.0
 httpx==0.27.0
 python-dotenv>=1.0.0
 upstox-python-sdk
+kiteconnect>=4.2.0
 yfinance>=0.2.40
 nsefin>=0.1.0
 nsepython>=2.9
