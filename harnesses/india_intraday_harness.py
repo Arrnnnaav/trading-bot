@@ -4,9 +4,10 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 import pytz
 
-from agents.fundamentals import FundamentalsAgent
-from agents.fii_dii import FIIDIIAgent
+from agents.technical_india import TechnicalIndiaAgent
 from agents.options_chain import OptionsChainAgent
+from agents.macro_india import MacroIndiaAgent
+from agents.news_analogue import NewsAnalogueAgent
 from brokers.upstox import UpstoxBroker
 from brokers.paper_broker import PaperBroker
 from config import config
@@ -40,11 +41,11 @@ class IndiaIntradayHarness(BaseHarness):
             if config.paper_trading
             else _broker
         )
-        # Phase 1 placeholder agents — replaced in Phase 2
         agents = [
-            FundamentalsAgent(),
-            FIIDIIAgent(),
+            TechnicalIndiaAgent(),
             OptionsChainAgent(broker),
+            MacroIndiaAgent(),
+            NewsAnalogueAgent(),
         ]
         super().__init__(
             state_path="data/india_intraday_progress.json",
