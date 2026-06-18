@@ -20,7 +20,11 @@ def _klines():
 
 def test_fii_strong_buying_is_long(tmp_path):
     records = [
-        {"date": f"2026-06-1{i}", "fii_net_cr": 800.0, "dii_net_cr": 200.0}
+        {
+            "date": f"2026-06-1{i}",
+            "fii_net_cr": 800.0 if i < 5 else 900.0,
+            "dii_net_cr": 200.0,
+        }
         for i in range(1, 6)
     ]
     _write_fii_files(tmp_path, records)

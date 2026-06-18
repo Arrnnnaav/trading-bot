@@ -59,7 +59,7 @@ class FIIDIIAgent(BaseAgent):
         today_fii = fii_flows[-1]
 
         # Strong FII buying + accelerating
-        if rolling_fii > 2000 and today_fii >= avg_fii:
+        if rolling_fii > 2000 and today_fii > avg_fii:
             confidence = min(0.5 + rolling_fii / 10000, 0.85)
             return AgentVote(
                 agent_name=self.name,
