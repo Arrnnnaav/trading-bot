@@ -131,6 +131,47 @@ def label_candles_triple_barrier(
     return df
 
 
+def label_candles_india(
+    df: pd.DataFrame,
+    target_pct: float = 0.015,
+    stop_pct: float = 0.0075,
+    window: int = 10,
+) -> pd.DataFrame:
+    """
+    India-specific labeling using daily OHLCV with 10-day forward window.
+
+    LONG  — max(high[i+1..i+window]) >= entry*(1+target_pct)
+              AND min(low[i+1..i+window]) >= entry*(1-stop_pct)  [no stop hit]
+    SHORT — min(low[i+1..i+window]) <= entry*(1-target_pct)
+              AND max(high[i+1..i+window]) <= entry*(1+stop_pct) [no stop hit]
+    HOLD  — all other cases; last `window` rows always HOLD.
+    """
+    closes = df["close"].to_numpy(dtype=np.float64)
+    highs = df["high"].to_numpy(dtype=np.float64) if "high" in df.columns else closes
+    lows = df["low"].to_numpy(dtype=np.float64) if "low" in df.columns else closes
+    n = len(closes)
+    labels = ["HOLD"] * n
+
+    for i in range(n - window):
+        entry = closes[i]
+        win_highs = highs[i + 1 : i + 1 + window]
+        win_lows = lows[i + 1 : i + 1 + window]
+
+        long_target_hit = win_highs.max() >= entry * (1.0 + target_pct)
+        long_stop_hit = win_lows.min() < entry * (1.0 - stop_pct)
+        short_target_hit = win_lows.min() <= entry * (1.0 - target_pct)
+        short_stop_hit = win_highs.max() > entry * (1.0 + stop_pct)
+
+        if long_target_hit and not long_stop_hit:
+            labels[i] = "LONG"
+        elif short_target_hit and not short_stop_hit:
+            labels[i] = "SHORT"
+
+    df = df.copy()
+    df["label"] = labels
+    return df
+
+
 def main():
     data_dir = Path("data/training")
     method = os.environ.get("LABEL_METHOD", "atr_triple_barrier").lower()
