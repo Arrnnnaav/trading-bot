@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trading Bot — Trades</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f1117;color:#e0e0e0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh}
+nav{display:flex;align-items:center;gap:20px;padding:0 24px;height:52px;background:#1a1d2e;border-bottom:1px solid #2a2d3e}
+.brand{font-weight:700;color:#fff;font-size:15px;margin-right:8px}
+nav a{color:#8888aa;text-decoration:none;font-size:13px;padding-bottom:3px}
+nav a.active{color:#00d4aa;border-bottom:2px solid #00d4aa}
+.spacer{flex:1}
+.paper-badge{background:#ff8c0018;color:#ff8c00;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;border:1px solid #ff8c0033}
+.toolbar{display:flex;gap:8px;align-items:center;padding:16px 24px;flex-wrap:wrap}
+.fb{background:#1a1d2e;border:1px solid #2a2d3e;color:#666;padding:5px 14px;border-radius:4px;font-size:12px;cursor:pointer}
+.fb.on{background:#00d4aa18;border-color:#00d4aa;color:#00d4aa}
+.fb.on-r{background:#ff4d6d18;border-color:#ff4d6d;color:#ff4d6d}
+.sep{color:#333;margin:0 4px}
+.tw{padding:0 24px 8px;overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{color:#555;font-size:10px;text-transform:uppercase;letter-spacing:1px;padding:8px 12px;border-bottom:1px solid #2a2d3e;text-align:left;white-space:nowrap}
+td{padding:10px 12px;border-bottom:1px solid #1a1d24;white-space:nowrap}
+tr:hover td{background:#1e2130}
+.pos{color:#00d4aa}.neg{color:#ff4d6d}
+.badge{display:inline-block;padding:2px 7px;border-radius:3px;font-size:11px;font-weight:600}
+.b-win{background:#00d4aa18;color:#00d4aa}
+.b-loss{background:#ff4d6d18;color:#ff4d6d}
+.b-pend{background:#88888818;color:#888}
+.pag{display:flex;gap:8px;align-items:center;padding:12px 24px;color:#555;font-size:12px}
+.pag button{background:#1a1d2e;border:1px solid #2a2d3e;color:#aaa;padding:4px 12px;border-radius:4px;cursor:pointer}
+.pag button:disabled{opacity:.3;cursor:default}
+.empty{padding:32px;text-align:center;color:#444;font-size:13px}
+</style>
+</head>
+<body>
+<nav>
+  <span class="brand">Trading Bot</span>
+  <a href="/">Overview</a>
+  <a href="/trades" class="active">Trades</a>
+  <a href="/performance">Performance</a>
+  <span class="spacer"></span>
+  <span class="paper-badge">PAPER</span>
+</nav>
+
+<div class="toolbar">
+  <span style="font-size:12px;color:#555;margin-right:4px">Direction:</span>
+  <button class="fb dir-f on" data-val="all" onclick="setF(this,'dir')">All</button>
+  <button class="fb dir-f" data-val="LONG" onclick="setF(this,'dir')">LONG</button>
+  <button class="fb dir-f" data-val="SHORT" onclick="setF(this,'dir')">SHORT</button>
+  <span class="sep">|</span>
+  <span style="font-size:12px;color:#555;margin-right:4px">Outcome:</span>
+  <button class="fb out-f on" data-val="all" onclick="setF(this,'out')">All</button>
+  <button class="fb out-f" data-val="TARGET_HIT" onclick="setF(this,'out')">✅ Win</button>
+  <button class="fb out-f" data-val="STOP_HIT" onclick="setF(this,'out')">❌ Loss</button>
+  <button class="fb out-f" data-val="PENDING" onclick="setF(this,'out')">⏳ Open</button>
+  <span class="spacer"></span>
+  <span id="count-label" style="font-size:12px;color:#555"></span>
+</div>
+
+<div class="tw">
+  <table>
+    <thead>
+      <tr>
+        <th>Opened (IST)</th>
+        <th>Ticker</th>
+        <th>Dir</th>
+        <th>Entry ₹</th>
+        <th>Exit ₹</th>
+        <th>Duration</th>
+        <th>P&amp;L ₹</th>
+        <th>Conf</th>
+        <th>Outcome</th>
+      </tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
+  <div id="empty-msg" class="empty" style="display:none">No trades match the filter.</div>
+</div>
+
+<div class="pag">
+  <button id="prev-btn" onclick="goPage(-1)" disabled>← Prev</button>
+  <span id="pag-info">—</span>
+  <button id="next-btn" onclick="goPage(1)" disabled>Next →</button>
+</div>
+
+<script>
+const IST = 5.5*3600000;
+const PAGE = 50;
+let all=[], filtered=[], page=0, dirF='all', outF='all';
+
+const fmtIST = iso => { if(!iso) return '—'; const d=new Date(new Date(iso).getTime()+IST); return d.toISOString().slice(0,16).replace('T',' '); };
+const fmtDur = (a,b) => { if(!a||!b) return '—'; const ms=new Date(b)-new Date(a); const h=Math.floor(ms/3600000),m=Math.floor((ms%3600000)/60000); return h?`${h}h ${m}m`:`${m}m`; };
+const fmtPnl = v => v==null?'—':(v>=0?'+':'')+'₹'+Math.abs(v).toLocaleString('en-IN',{maximumFractionDigits:0});
+
+function badge(o) {
+  if(o==='TARGET_HIT') return '<span class="badge b-win">TARGET HIT</span>';
+  if(o==='STOP_HIT')   return '<span class="badge b-loss">STOP HIT</span>';
+  if(o==='EXPIRED')    return '<span class="badge b-pend">EXPIRED</span>';
+  return '<span class="badge b-pend">OPEN</span>';
+}
+
+function render() {
+  filtered = all.filter(t => (dirF==='all'||t.direction===dirF) && (outF==='all'||t.outcome===outF));
+  const total = filtered.length;
+  const start = page*PAGE, end = Math.min(start+PAGE, total);
+  const rows = filtered.slice(start, end);
+
+  document.getElementById('count-label').textContent = `${total} trade${total!==1?'s':''}`;
+  document.getElementById('pag-info').textContent = total ? `${start+1}–${end} of ${total}` : '0';
+  document.getElementById('prev-btn').disabled = page===0;
+  document.getElementById('next-btn').disabled = end>=total;
+
+  if (!rows.length) {
+    document.getElementById('tbody').innerHTML='';
+    document.getElementById('empty-msg').style.display='block';
+    return;
+  }
+  document.getElementById('empty-msg').style.display='none';
+  document.getElementById('tbody').innerHTML = rows.map(t => {
+    const pnl = t.pnl_inr;
+    const pc = pnl==null?'':pnl>=0?'pos':'neg';
+    return `<tr>
+      <td>${fmtIST(t.entry_time)}</td>
+      <td style="font-weight:600">${t.ticker}</td>
+      <td class="${t.direction==='LONG'?'pos':'neg'}">${t.direction}</td>
+      <td>₹${(t.entry_price||0).toLocaleString('en-IN')}</td>
+      <td>${t.exit_price!=null?'₹'+t.exit_price.toLocaleString('en-IN'):'—'}</td>
+      <td style="color:#666">${fmtDur(t.entry_time,t.exit_time)}</td>
+      <td class="${pc}">${fmtPnl(pnl)}</td>
+      <td style="color:#666">${t.confidence?(t.confidence*100).toFixed(0)+'%':'—'}</td>
+      <td>${badge(t.outcome)}</td>
+    </tr>`;
+  }).join('');
+}
+
+function setF(btn, type) {
+  document.querySelectorAll('.'+type+'-f').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  if(type==='dir') dirF=btn.dataset.val;
+  else outF=btn.dataset.val;
+  page=0; render();
+}
+function goPage(d) { page=Math.max(0,page+d); render(); }
+
+fetch('/api/trades').then(r=>r.json()).then(data=>{
+  all = data.reverse(); // newest first
+  render();
+}).catch(e=>console.error(e));
+</script>
+</body>
+</html>
