@@ -29,8 +29,10 @@ class KronosAgent(BaseAgent):
         try:
             import torch
 
+            # weights_only=False required: Kronos is a full model object, not a state dict
             self._model = torch.load(str(path), map_location="cpu", weights_only=False)
-            self._model.eval()
+            if hasattr(self._model, "eval"):
+                self._model.eval()
             return self._model
         except Exception as exc:
             _LOG.warning("Kronos model load failed: %s", exc)
@@ -85,6 +87,8 @@ class KronosAgent(BaseAgent):
             )
 
     def _infer(self, model, klines: list[dict]) -> AgentVote:
+        # model.predict(x) is the required interface; see training/train_kronos_india.py
+        # Expected return: {"long_prob": float, "short_prob": float, "hold_prob": float}
         x = self._prepare_input(klines)
         probs = model.predict(x)
         long_prob = probs.get("long_prob", 0.0)
