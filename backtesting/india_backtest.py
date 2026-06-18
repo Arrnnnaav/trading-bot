@@ -18,6 +18,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import numpy as np
+
 
 # ---------------------------------------------------------------------------
 # Transaction cost constants (exact, not approximated)
@@ -254,6 +256,7 @@ def _max_drawdown(cumulative_pnl: np.ndarray) -> float:
         if val > peak:
             peak = val
         if peak != 0:
+            # Approximation: denominator is abs(peak_pnl), not starting capital.
             dd = (peak - val) / abs(peak) * 100.0
             max_dd = max(max_dd, dd)
     return max_dd
@@ -286,7 +289,6 @@ def _simulate_year(
     train_df is unused here (model already fitted by caller) but accepted
     for API consistency with run_backtest.
     """
-    import numpy as np
     import pandas as pd
     from training.india_features import compute_features
 
@@ -372,7 +374,7 @@ def _simulate_year(
             monthly_buckets.get(month_key, 0.0) + trade["pnl_inr"]
         )
 
-        i += max(1, trade["hold_days"])
+        i += 1 + max(0, trade["hold_days"])
 
     if not trades:
         return BacktestResult(
@@ -398,7 +400,9 @@ def _simulate_year(
     losses = pnl_series[pnl_series < 0]
     win_rate = float(len(wins) / len(trades) * 100.0)
     profit_factor = (
-        (float(wins.sum()) / abs(float(losses.sum()))) if len(losses) > 0 else 0.0
+        (float(wins.sum()) / abs(float(losses.sum())))
+        if len(losses) > 0
+        else float("inf")
     )
     avg_hold = float(np.mean([t["hold_days"] for t in trades]))
 
@@ -435,7 +439,7 @@ def _train_lgb_for_backtest(X_train, y_train):
 
 def run_backtest(
     historical_dir: str = "data/historical",
-    model_path: str = "models/xgb_india/model.pkl",
+    model_path: str = "models/xgb_india/model.pkl",  # Accepted for API compatibility; walk-forward retrains fresh each OOS year.
     fii_dir: str = "data/fii_dii",
     start_year: int = 2010,
     end_year: int | None = None,
@@ -447,7 +451,6 @@ def run_backtest(
     runs _simulate_year per index and combines results (trade-count-weighted
     averages for rate metrics; sums for P&L).
     """
-    import numpy as np
     import pandas as pd
     from training.dataset import load_india_data
     from training.india_features import compute_features
