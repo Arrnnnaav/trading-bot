@@ -94,8 +94,16 @@ class Config:
         errors: list[str] = []
         if not self.telegram_token:
             errors.append("TELEGRAM_TOKEN is required")
-        if not self.telegram_india_chat_id:
-            errors.append("TELEGRAM_INDIA_CHAT_ID is required")
+        if self.enable_india and not self.telegram_india_chat_id:
+            errors.append("TELEGRAM_INDIA_CHAT_ID is required when ENABLE_INDIA=true")
+        if self.enable_india and not self.telegram_allowed_user_ids:
+            errors.append(
+                "TELEGRAM_ALLOWED_USER_IDS is required when ENABLE_INDIA=true"
+            )
+        if self.enable_india and not self.paper_trading and not self.upstox_api_key:
+            errors.append(
+                "UPSTOX_API_KEY is required when ENABLE_INDIA=true and PAPER_TRADING=false"
+            )
         if not self.paper_trading and not self.upstox_access_token:
             errors.append("UPSTOX_ACCESS_TOKEN is required when PAPER_TRADING=false")
         if self.dashboard_host == "0.0.0.0" and not self.paper_trading:

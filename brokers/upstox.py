@@ -59,7 +59,7 @@ class UpstoxBroker(BrokerBase):
         self, instrument_token: str, interval: str = "1d", limit: int = 60
     ) -> list[dict]:
         today = date.today()
-        from_date = "2024-01-01"
+        from_date = (today - timedelta(days=365)).isoformat()
         to_date = today.isoformat()
         resp = _get(
             f"{self.BASE_URL}/historical-candle/{instrument_token}/{interval}/{from_date}/{to_date}",

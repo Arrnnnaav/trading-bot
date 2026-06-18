@@ -106,7 +106,8 @@ class BaseHarness:
         self.state.session_count += 1
         self._save_state()
 
-        await self.telegram_bot.send_signal(signal)
+        if self.telegram_bot is not None:
+            await self.telegram_bot.send_signal(signal)
         return signal
 
     async def update_learnings(self):
