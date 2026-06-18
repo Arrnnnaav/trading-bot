@@ -78,6 +78,45 @@ class UpstoxBroker(BrokerBase):
             for c in candles[-limit:]
         ]
 
+    _VALID_INTRADAY_INTERVALS = {
+        "1minute",
+        "5minute",
+        "15minute",
+        "30minute",
+        "60minute",
+    }
+
+    def _get_intraday_candles(
+        self, instrument: str, interval: str, from_date: str, to_date: str
+    ) -> list:
+        resp = _get(
+            f"{self.BASE_URL}/historical-candle/intraday/{instrument}/{interval}/{to_date}/{from_date}",
+            headers=self._headers,
+        )
+        return resp.json()["data"]["candles"]
+
+    def get_ohlcv_intraday(
+        self, instrument: str, interval: str = "15minute", days_back: int = 5
+    ) -> list[dict]:
+        if interval not in self._VALID_INTRADAY_INTERVALS:
+            raise ValueError(
+                f"Invalid interval '{interval}'. Valid: {sorted(self._VALID_INTRADAY_INTERVALS)}"
+            )
+        to_date = date.today().isoformat()
+        from_date = (date.today() - timedelta(days=days_back)).isoformat()
+        candles = self._get_intraday_candles(instrument, interval, from_date, to_date)
+        return [
+            {
+                "time": c[0],
+                "open": c[1],
+                "high": c[2],
+                "low": c[3],
+                "close": c[4],
+                "volume": c[5],
+            }
+            for c in candles
+        ]
+
     def get_options_chain(self, index: str, expiry: str) -> list[dict]:
         token = "NSE_INDEX|Nifty 50" if index == "NIFTY" else "NSE_INDEX|Nifty Bank"
         resp = _get(

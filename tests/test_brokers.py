@@ -1,3 +1,5 @@
+import pytest
+
 from brokers.upstox import UpstoxBroker
 
 
@@ -33,3 +35,25 @@ def test_upstox_place_options_order_returns_order_id(monkeypatch):
         index="NIFTY", direction="LONG", expiry="2026-05-30", size_inr=2000.0
     )
     assert result["order_id"] == "upstox_456"
+
+
+def test_upstox_get_ohlcv_intraday_returns_candles(monkeypatch):
+    broker = UpstoxBroker(api_key="test", access_token="test")
+    mock_candles = [
+        ["2026-06-18T09:20:00+05:30", 22400.0, 22450.0, 22380.0, 22430.0, 12345]
+    ]
+    monkeypatch.setattr(
+        broker,
+        "_get_intraday_candles",
+        lambda instrument, interval, from_date, to_date: mock_candles,
+    )
+    result = broker.get_ohlcv_intraday("NSE_INDEX|Nifty 50", "15minute", days_back=2)
+    assert len(result) == 1
+    assert result[0]["close"] == 22430.0
+    assert "time" in result[0]
+
+
+def test_upstox_get_ohlcv_intraday_invalid_interval(monkeypatch):
+    broker = UpstoxBroker(api_key="test", access_token="test")
+    with pytest.raises(ValueError, match="interval"):
+        broker.get_ohlcv_intraday("NSE_INDEX|Nifty 50", "3minute")
