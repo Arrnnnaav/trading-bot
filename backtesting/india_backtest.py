@@ -206,3 +206,208 @@ def _simulate_position(
         "pnl_pct": pnl_pct,
         "pnl_inr": pnl_inr,
     }
+
+
+# ---------------------------------------------------------------------------
+# Statistical metric helpers
+# ---------------------------------------------------------------------------
+
+
+def _sharpe(returns: np.ndarray) -> float:
+    """Annualised Sharpe. Returns 0.0 if std == 0 or len < 2."""
+    if len(returns) < 2:
+        return 0.0
+    std = returns.std()
+    if std == 0:
+        return 0.0
+    return float(returns.mean() / std * math.sqrt(252))
+
+
+def _sortino(returns: np.ndarray) -> float:
+    """Annualised Sortino using downside deviation. Returns 0.0 if no downside."""
+    if len(returns) < 2:
+        return 0.0
+    downside = returns[returns < 0]
+    if len(downside) == 0:
+        return 0.0
+    downside_std = downside.std()
+    if downside_std == 0:
+        return 0.0
+    return float(returns.mean() / downside_std * math.sqrt(252))
+
+
+def _max_drawdown(cumulative_pnl: np.ndarray) -> float:
+    """
+    Max peak-to-trough percentage decline in a cumulative P&L array (₹).
+
+    Returns positive percentage (e.g. 12.5 means 12.5% drawdown).
+    Returns 0.0 if array is empty or monotonically increasing.
+    """
+    if len(cumulative_pnl) == 0:
+        return 0.0
+    peak = cumulative_pnl[0]
+    max_dd = 0.0
+    for val in cumulative_pnl:
+        if val > peak:
+            peak = val
+        if peak != 0:
+            dd = (peak - val) / abs(peak) * 100.0
+            max_dd = max(max_dd, dd)
+    return max_dd
+
+
+# ---------------------------------------------------------------------------
+# Year OOS simulator
+# ---------------------------------------------------------------------------
+
+
+def _simulate_year(
+    train_df,
+    oos_df,
+    model,
+    index_spec: dict,
+    fii_dir: str = "data/fii_dii",
+    max_hold_days: int = MAX_HOLD_DAYS,
+    target_mult: float = TARGET_MULT,
+    stop_pct: float = STOP_LOSS_PCT,
+) -> BacktestResult:
+    """
+    Run one OOS year of options backtesting using model predictions.
+
+    Steps:
+      1. Compute features on oos_df via training.india_features.compute_features
+      2. Predict LONG/SHORT/HOLD for each bar
+      3. For LONG/SHORT: simulate options position starting next bar
+      4. Aggregate BacktestResult with all metrics
+
+    train_df is unused here (model already fitted by caller) but accepted
+    for API consistency with run_backtest.
+    """
+    import numpy as np
+    import pandas as pd
+    from training.india_features import compute_features
+
+    lot_size = index_spec["lot_size"]
+    iv_annual = index_spec["iv_annual"]
+
+    # Ensure oos_df has a DatetimeIndex named 'date' for compute_features.
+    # Drop the 'date' column first so reset_index() won't collide with it later.
+    oos_work = oos_df.copy()
+    if "date" in oos_work.columns and not isinstance(oos_work.index, pd.DatetimeIndex):
+        oos_work = oos_work.set_index(
+            pd.DatetimeIndex(pd.to_datetime(oos_work["date"]), name="date")
+        ).drop(columns=["date"], errors="ignore")
+
+    # Compute features; if fii_5d_net column already present in input, _fii_5d_net
+    # will overwrite it — that is fine.
+    # reset_index() promotes the DatetimeIndex back to a 'date' column.
+    feat_df = compute_features(oos_work, fii_dir=fii_dir).dropna().reset_index()
+
+    feature_cols = [c for c in feat_df.columns if c not in _FEATURE_EXCLUDE]
+    if len(feat_df) < 2 or not feature_cols:
+        year_val = 0
+        if "date" in oos_df.columns and len(oos_df) > 0:
+            year_val = int(pd.to_datetime(oos_df["date"].iloc[0]).year)
+        elif len(oos_df) > 0 and isinstance(oos_df.index, pd.DatetimeIndex):
+            year_val = int(oos_df.index[0].year)
+        return BacktestResult(
+            year=year_val,
+            sharpe=0.0,
+            sortino=0.0,
+            max_drawdown_pct=0.0,
+            win_rate=0.0,
+            profit_factor=0.0,
+            total_trades=0,
+            avg_hold_days=0.0,
+            total_pnl=0.0,
+            monthly_pnl={},
+        )
+
+    X = feat_df[feature_cols].to_numpy(dtype=np.float32)
+    preds = model.predict(X)  # integer class array
+
+    closes = feat_df["close"].to_numpy(dtype=np.float64)
+    dates = pd.to_datetime(feat_df["date"])
+
+    year = int(dates.iloc[0].year)
+
+    # DTE: intraday (max_hold_days==1) → 1 day, positional → 7 days
+    dte_days = 7 if max_hold_days > 1 else 1
+
+    trades: list = []
+    monthly_buckets: dict = {}
+
+    i = 0
+    while i < len(preds) - 1:
+        pred = int(preds[i])
+        if pred == 2:  # HOLD
+            i += 1
+            continue
+
+        spot = closes[i]
+        entry_premium = _calc_entry_premium(spot, iv_annual, dte_days)
+        if entry_premium <= 0.0:
+            i += 1
+            continue
+
+        remaining_closes = closes[i + 1 :].tolist()
+
+        trade = _simulate_position(
+            entry_premium=entry_premium,
+            daily_closes=remaining_closes,
+            iv_annual=iv_annual,
+            lot_size=lot_size,
+            target_mult=target_mult,
+            stop_pct=stop_pct,
+            max_days=max_hold_days,
+        )
+        trade["entry_date"] = dates.iloc[i]
+        trades.append(trade)
+
+        month_key = dates.iloc[i].strftime("%Y-%m")
+        monthly_buckets[month_key] = (
+            monthly_buckets.get(month_key, 0.0) + trade["pnl_inr"]
+        )
+
+        i += max(1, trade["hold_days"])
+
+    if not trades:
+        return BacktestResult(
+            year=year,
+            sharpe=0.0,
+            sortino=0.0,
+            max_drawdown_pct=0.0,
+            win_rate=0.0,
+            profit_factor=0.0,
+            total_trades=0,
+            avg_hold_days=0.0,
+            total_pnl=0.0,
+            monthly_pnl={},
+        )
+
+    pnl_series = np.array([t["pnl_inr"] for t in trades], dtype=np.float64)
+    cum_pnl = np.cumsum(pnl_series)
+
+    initial_notional = _calc_entry_premium(closes[0], iv_annual, dte_days) * lot_size
+    daily_ret = pnl_series / max(initial_notional, 1.0)
+
+    wins = pnl_series[pnl_series > 0]
+    losses = pnl_series[pnl_series < 0]
+    win_rate = float(len(wins) / len(trades) * 100.0)
+    profit_factor = (
+        (float(wins.sum()) / abs(float(losses.sum()))) if len(losses) > 0 else 0.0
+    )
+    avg_hold = float(np.mean([t["hold_days"] for t in trades]))
+
+    return BacktestResult(
+        year=year,
+        sharpe=_sharpe(daily_ret),
+        sortino=_sortino(daily_ret),
+        max_drawdown_pct=_max_drawdown(cum_pnl),
+        win_rate=win_rate,
+        profit_factor=profit_factor,
+        total_trades=len(trades),
+        avg_hold_days=avg_hold,
+        total_pnl=float(cum_pnl[-1]),
+        monthly_pnl=monthly_buckets,
+    )

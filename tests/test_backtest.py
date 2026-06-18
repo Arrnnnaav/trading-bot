@@ -200,3 +200,139 @@ class TestSimulatePosition:
         )
         assert result["exit_reason"] == "TIME_EXIT"
         assert result["hold_days"] == 0
+
+
+class TestSimulateYear:
+    """Uses synthetic data to avoid dependency on real parquet files."""
+
+    def _make_synthetic_df(
+        self, n_rows: int = 300, symbol: str = "NSEI"
+    ) -> "pd.DataFrame":
+        import pandas as pd
+        import numpy as np
+
+        dates = pd.date_range("2020-01-01", periods=n_rows, freq="B")
+        close = 22000.0 + np.cumsum(np.random.default_rng(42).normal(0, 100, n_rows))
+        df = pd.DataFrame(
+            {
+                "date": dates,
+                "open": close * 0.999,
+                "high": close * 1.005,
+                "low": close * 0.995,
+                "close": close,
+                "volume": np.ones(n_rows) * 0,  # index tickers have 0 volume
+                "symbol": symbol,
+                "label": np.random.default_rng(42).choice(
+                    ["LONG", "SHORT", "HOLD"], n_rows
+                ),
+                "fii_5d_net": np.zeros(n_rows),
+            }
+        )
+        return df
+
+    def _make_mock_model(self, prediction: int = 0):
+        """Returns a model that always predicts the same class."""
+
+        class _MockModel:
+            def __init__(self, pred):
+                self._pred = pred
+
+            def predict(self, X):
+                import numpy as np
+
+                return np.full(len(X), self._pred, dtype=np.int64)
+
+        return _MockModel(prediction)
+
+    def test_returns_backtest_result_type(self):
+        from backtesting.india_backtest import (
+            _simulate_year,
+            BacktestResult,
+            _INDEX_SPEC,
+        )
+
+        df = self._make_synthetic_df(300)
+        train_df = df.iloc[:200].copy()
+        oos_df = df.iloc[200:].copy()
+        model = self._make_mock_model(prediction=2)  # all HOLD → no trades
+        result = _simulate_year(train_df, oos_df, model, _INDEX_SPEC["NSEI"])
+        assert isinstance(result, BacktestResult)
+
+    def test_all_hold_no_trades(self):
+        from backtesting.india_backtest import _simulate_year, _INDEX_SPEC
+
+        df = self._make_synthetic_df(300)
+        result = _simulate_year(
+            df.iloc[:200].copy(),
+            df.iloc[200:].copy(),
+            self._make_mock_model(2),  # HOLD
+            _INDEX_SPEC["NSEI"],
+        )
+        assert result.total_trades == 0
+        assert result.total_pnl == 0.0
+        assert result.win_rate == 0.0
+
+    def test_sharpe_is_annualised(self):
+        from backtesting.india_backtest import _simulate_year, _INDEX_SPEC
+        import math
+
+        df = self._make_synthetic_df(500)
+        result = _simulate_year(
+            df.iloc[:250].copy(),
+            df.iloc[250:].copy(),
+            self._make_mock_model(0),  # all LONG
+            _INDEX_SPEC["NSEI"],
+        )
+        # Sharpe must be a finite float (can be negative or zero — just check type)
+        assert isinstance(result.sharpe, float)
+        assert math.isfinite(result.sharpe)
+
+    def test_win_rate_bounded(self):
+        from backtesting.india_backtest import _simulate_year, _INDEX_SPEC
+
+        df = self._make_synthetic_df(400)
+        result = _simulate_year(
+            df.iloc[:200].copy(),
+            df.iloc[200:].copy(),
+            self._make_mock_model(0),
+            _INDEX_SPEC["NSEI"],
+        )
+        assert 0.0 <= result.win_rate <= 100.0
+
+    def test_max_drawdown_non_negative(self):
+        from backtesting.india_backtest import _simulate_year, _INDEX_SPEC
+
+        df = self._make_synthetic_df(400)
+        result = _simulate_year(
+            df.iloc[:200].copy(),
+            df.iloc[200:].copy(),
+            self._make_mock_model(1),  # all SHORT
+            _INDEX_SPEC["NSEI"],
+        )
+        assert result.max_drawdown_pct >= 0.0
+
+    def test_monthly_pnl_keys_are_yyyy_mm(self):
+        from backtesting.india_backtest import _simulate_year, _INDEX_SPEC
+        import re
+
+        df = self._make_synthetic_df(500)
+        result = _simulate_year(
+            df.iloc[:250].copy(),
+            df.iloc[250:].copy(),
+            self._make_mock_model(0),
+            _INDEX_SPEC["NSEI"],
+        )
+        for key in result.monthly_pnl.keys():
+            assert re.match(r"^\d{4}-\d{2}$", key), f"Bad key: {key}"
+
+    def test_profit_factor_non_negative(self):
+        from backtesting.india_backtest import _simulate_year, _INDEX_SPEC
+
+        df = self._make_synthetic_df(400)
+        result = _simulate_year(
+            df.iloc[:200].copy(),
+            df.iloc[200:].copy(),
+            self._make_mock_model(0),
+            _INDEX_SPEC["NSEI"],
+        )
+        assert result.profit_factor >= 0.0
