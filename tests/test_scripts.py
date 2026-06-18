@@ -54,24 +54,24 @@ def test_fetch_historical_incremental_append(tmp_path):
 
 
 def test_fetch_fii_dii_creates_json(tmp_path):
-    import pytest
-
-    mock_data = {
-        "date": "18-Jun-2026",
-        "fii_net_purchase_sales": "2500.50",
-        "dii_net_purchase_sales": "-800.25",
-    }
-    with patch(
-        "scripts.fetch_fii_dii.nsefin.nse.get_fii_dii_activity", return_value=mock_data
-    ):
-        from scripts.fetch_fii_dii import fetch_fii_dii
-
-        fetch_fii_dii(data_dir=tmp_path)
-
-    files = list(tmp_path.glob("*.json"))
-    assert len(files) == 1
+    from datetime import date
+    from unittest.mock import MagicMock
     import json
 
-    data = json.loads(files[0].read_text())
-    assert data["fii_net_cr"] == pytest.approx(2500.50)
-    assert data["dii_net_cr"] == pytest.approx(-800.25)
+    mock_nsefin = MagicMock()
+    mock_nsefin.get_fii_dii_activity.return_value = [
+        {
+            "date": "2026-06-18",
+            "fii_net_value": 2500.50,
+            "dii_net_value": -800.25,
+        }
+    ]
+    with patch.dict("sys.modules", {"nsefin": mock_nsefin}):
+        from scripts.fetch_fii_dii import fetch_and_save
+
+        result = fetch_and_save(output_dir=str(tmp_path), fetch_date=date(2026, 6, 18))
+
+    assert result is not None and result.exists()
+    data = json.loads(result.read_text())
+    assert data["fii_net_cr"] == 2500.50
+    assert data["dii_net_cr"] == -800.25

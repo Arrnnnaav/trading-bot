@@ -1,72 +1,97 @@
-"""Fetch today's FII/DII activity from NSE via nsefin and cache to data/fii_dii/.
+"""Daily FII/DII data fetcher.
 
-Usage:
-    python -m scripts.fetch_fii_dii           # fetch today
-    python -m scripts.fetch_fii_dii --date 2026-06-18
+Calls nsefin to get net institutional flows and saves to:
+    data/fii_dii/YYYY-MM-DD.json
 
-Run at 19:00 IST after NSE publishes daily data.
-Output: data/fii_dii/YYYY-MM-DD.json
+Format:
+    {"date": "2026-06-18", "fii_net_cr": 1234.5, "dii_net_cr": -567.8}
+
+Run:
+    python -m scripts.fetch_fii_dii
+or call fetch_and_save(output_dir, date) from other modules.
+
+Scheduled: 19:00 IST on weekdays (see main.py Task 6).
+NSE publishes FII/DII data after market close (~18:30 IST).
 """
 
-from __future__ import annotations
-
-import argparse
 import json
 import logging
-import re
-from datetime import datetime, timezone
+from datetime import date as DateType
 from pathlib import Path
-
-import nsefin
 
 _LOG = logging.getLogger(__name__)
 
 
-def _parse_date(raw_date: str) -> str:
-    """Convert '18-Jun-2026' or '2026-06-18' to 'YYYY-MM-DD'."""
-    for fmt in ("%d-%b-%Y", "%Y-%m-%d"):
-        try:
-            return datetime.strptime(raw_date.strip(), fmt).strftime("%Y-%m-%d")
-        except ValueError:
-            continue
-    raise ValueError(f"Unrecognised date format: {raw_date!r}")
+def fetch_and_save(
+    output_dir: str = "data/fii_dii",
+    fetch_date: DateType | None = None,
+) -> Path | None:
+    """Fetch FII/DII data for fetch_date (defaults to today) and save as JSON.
 
+    Returns the path written, or None if fetch failed (graceful — does not crash).
+    """
+    from datetime import date as _date
 
-def _parse_cr(value: str | float | int) -> float:
-    """Parse ₹ crore value from string like '2,500.50' or '-800.25'."""
-    if isinstance(value, (int, float)):
-        return float(value)
-    return float(re.sub(r"[,\s]", "", str(value)))
+    if fetch_date is None:
+        fetch_date = _date.today()
 
+    date_str = fetch_date.strftime("%Y-%m-%d")
+    out_dir = Path(output_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / f"{date_str}.json"
 
-def fetch_fii_dii(data_dir: Path | str = "data/fii_dii") -> Path:
-    data_dir = Path(data_dir)
-    data_dir.mkdir(parents=True, exist_ok=True)
+    if out_path.exists():
+        _LOG.info("FII/DII data for %s already exists at %s", date_str, out_path)
+        return out_path
 
-    raw = nsefin.nse.get_fii_dii_activity()
-    date_str = _parse_date(raw["date"])
-    out_path = data_dir / f"{date_str}.json"
+    try:
+        import nsefin
 
-    record = {
-        "date": date_str,
-        "fii_net_cr": _parse_cr(raw["fii_net_purchase_sales"]),
-        "dii_net_cr": _parse_cr(raw["dii_net_purchase_sales"]),
-        "source": "nsefin",
-        "fetched_at": datetime.now(timezone.utc).isoformat(),
-    }
-    out_path.write_text(json.dumps(record, indent=2))
-    _LOG.info(
-        "FII/DII saved to %s: FII=%+.0f DII=%+.0f Cr",
-        out_path,
-        record["fii_net_cr"],
-        record["dii_net_cr"],
-    )
-    return out_path
+        raw = nsefin.get_fii_dii_activity()
+        # nsefin returns a list of dicts; most recent entry is first
+        # Each row has keys: date, fii_net_value (crore), dii_net_value (crore)
+        if not raw:
+            _LOG.warning("nsefin returned empty data for %s", date_str)
+            return None
+
+        # Find today's row or use the most recent
+        entry = None
+        for row in raw:
+            row_date = str(row.get("date", "")).strip()
+            if row_date == date_str or row_date.startswith(date_str):
+                entry = row
+                break
+        if entry is None:
+            entry = raw[0]  # fallback: most recent
+
+        payload = {
+            "date": date_str,
+            "fii_net_cr": float(entry.get("fii_net_value", 0.0)),
+            "dii_net_cr": float(entry.get("dii_net_value", 0.0)),
+        }
+        out_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        _LOG.info(
+            "Saved FII/DII data for %s: FII=%.1f Cr, DII=%.1f Cr",
+            date_str,
+            payload["fii_net_cr"],
+            payload["dii_net_cr"],
+        )
+        return out_path
+
+    except ImportError:
+        _LOG.warning(
+            "nsefin not installed — skipping FII/DII fetch. pip install nsefin"
+        )
+        return None
+    except Exception as exc:
+        _LOG.warning("FII/DII fetch failed for %s: %s", date_str, exc)
+        return None
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--data-dir", default="data/fii_dii")
-    args = parser.parse_args()
-    fetch_fii_dii(data_dir=args.data_dir)
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    result = fetch_and_save()
+    if result:
+        print(f"Saved: {result}")
+    else:
+        print("Fetch failed or skipped — check logs")
