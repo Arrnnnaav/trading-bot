@@ -1,11 +1,10 @@
-"""Tests for AgentPerformanceTracker, PatternReputationTracker, PaperBroker, XGBTechnicalAgent."""
+"""Tests for AgentPerformanceTracker, PatternReputationTracker, PaperBroker."""
 
 import json
-import pytest
 from unittest.mock import MagicMock
 from pathlib import Path
 
-from core.models import Direction, Market
+from core.models import Direction
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -157,7 +156,6 @@ class TestPatternReputationTracker:
 class TestPaperBroker:
     def test_place_order_logs_trade(self, tmp_path):
         from brokers.paper_broker import PaperBroker
-        from core.models import Direction
 
         mock_broker = MagicMock()
         log_path = str(tmp_path / "paper.json")
@@ -174,7 +172,6 @@ class TestPaperBroker:
 
     def test_place_options_order_logs_trade(self, tmp_path):
         from brokers.paper_broker import PaperBroker
-        from core.models import Direction
 
         mock_broker = MagicMock()
         log_path = str(tmp_path / "paper.json")
@@ -210,7 +207,6 @@ class TestPaperBroker:
 
     def test_multiple_trades_accumulate(self, tmp_path):
         from brokers.paper_broker import PaperBroker
-        from core.models import Direction
 
         mock_broker = MagicMock()
         log_path = str(tmp_path / "paper.json")
@@ -221,85 +217,3 @@ class TestPaperBroker:
 
         trades = json.loads(Path(log_path).read_text())
         assert len(trades) == 2
-
-
-# ── XGBTechnicalAgent ─────────────────────────────────────────────────────────
-
-
-class TestXGBTechnicalAgent:
-    def test_requires_model_file(self, monkeypatch, tmp_path):
-        from agents import xgb_technical
-
-        monkeypatch.setattr(xgb_technical, "MODEL_PATH", tmp_path / "missing.txt")
-        with pytest.raises(FileNotFoundError, match="XGB model not found"):
-            xgb_technical.XGBTechnicalAgent()
-
-    def test_returns_hold_on_insufficient_data(self, tmp_path):
-        import lightgbm as lgb
-        from agents.xgb_technical import XGBTechnicalAgent
-
-        agent = XGBTechnicalAgent.__new__(XGBTechnicalAgent)
-        mock_model = MagicMock(spec=lgb.Booster)
-        agent._model = mock_model
-
-        vote = agent.analyze("NIFTY", make_klines(30), Market.INDIA)
-        assert vote.direction == Direction.HOLD
-        assert vote.confidence == 0.0
-        assert "insufficient" in vote.reasoning.lower()
-        mock_model.predict.assert_not_called()
-
-    def test_returns_hold_below_confidence_threshold(self, tmp_path, monkeypatch):
-        import numpy as np
-        import lightgbm as lgb
-        import agents.xgb_technical as xgb_mod
-        from agents.xgb_technical import XGBTechnicalAgent, FEATURE_ORDER
-
-        dummy_feats = {f: 0.0 for f in FEATURE_ORDER}
-        monkeypatch.setattr(xgb_mod, "_compute_features", lambda df: dummy_feats)
-
-        agent = XGBTechnicalAgent.__new__(XGBTechnicalAgent)
-        mock_model = MagicMock(spec=lgb.Booster)
-        # Max prob = 0.45, below 0.50 threshold
-        mock_model.predict.return_value = np.array([[0.45, 0.30, 0.25]])
-        agent._model = mock_model
-
-        vote = agent.analyze("NIFTY", make_klines(100), Market.INDIA)
-        assert vote.direction == Direction.HOLD
-        assert vote.confidence == 0.0
-
-    def test_returns_long_vote_above_threshold(self, tmp_path, monkeypatch):
-        import numpy as np
-        import lightgbm as lgb
-        import agents.xgb_technical as xgb_mod
-        from agents.xgb_technical import XGBTechnicalAgent, FEATURE_ORDER
-
-        dummy_feats = {f: 0.0 for f in FEATURE_ORDER}
-        monkeypatch.setattr(xgb_mod, "_compute_features", lambda df: dummy_feats)
-
-        agent = XGBTechnicalAgent.__new__(XGBTechnicalAgent)
-        mock_model = MagicMock(spec=lgb.Booster)
-        # LONG with confidence 0.72
-        mock_model.predict.return_value = np.array([[0.72, 0.15, 0.13]])
-        agent._model = mock_model
-
-        vote = agent.analyze("NIFTY", make_klines(100), Market.INDIA)
-        assert vote.direction == Direction.LONG
-        assert vote.confidence == pytest.approx(0.72, abs=0.01)
-        assert vote.agent_name == "XGBTechnical"
-
-    def test_caps_confidence_at_0_90(self, tmp_path, monkeypatch):
-        import numpy as np
-        import lightgbm as lgb
-        import agents.xgb_technical as xgb_mod
-        from agents.xgb_technical import XGBTechnicalAgent, FEATURE_ORDER
-
-        dummy_feats = {f: 0.0 for f in FEATURE_ORDER}
-        monkeypatch.setattr(xgb_mod, "_compute_features", lambda df: dummy_feats)
-
-        agent = XGBTechnicalAgent.__new__(XGBTechnicalAgent)
-        mock_model = MagicMock(spec=lgb.Booster)
-        mock_model.predict.return_value = np.array([[0.99, 0.005, 0.005]])
-        agent._model = mock_model
-
-        vote = agent.analyze("NIFTY", make_klines(100), Market.INDIA)
-        assert vote.confidence <= 0.90

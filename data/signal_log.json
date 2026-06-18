@@ -1,1 +1,158 @@
-[]
+[
+  {
+    "id": "sig_20260525_105550_c0f2f7",
+    "market": "crypto",
+    "ticker": "ETH/USDT",
+    "direction": "SHORT",
+    "entry_price": 3381.04,
+    "target_price": 3300.34,
+    "stop_price": 3425.87,
+    "confidence": 0.745,
+    "position_size_inr": 2000.0,
+    "generated_at": "2026-05-25T10:56:20.540921+00:00",
+    "executed": false,
+    "outcome": "PENDING",
+    "outcome_price": null,
+    "outcome_at": null,
+    "hypothetical_pnl_pct": null,
+    "hypothetical_pnl_inr": null,
+    "agent_votes": [
+      {
+        "agent_name": "ChronosTechnical",
+        "direction": "HOLD",
+        "confidence": 0.8320916295051575,
+        "reasoning": "Chronos-2(v2): HOLD (p=0.83) | LONG=0.05 SHORT=0.12 HOLD=0.83 | 96 candles, ETH/USDT"
+      },
+      {
+        "agent_name": "XGBTechnical",
+        "direction": "HOLD",
+        "confidence": 0.0,
+        "reasoning": "XGB: HOLD @ 0.36 \u2014 below threshold"
+      },
+      {
+        "agent_name": "NewsSentiment",
+        "direction": "SHORT",
+        "confidence": 0.8,
+        "reasoning": "Sentiment score: -0.30. Top: Ethereum Community Pushes for $1B Group to Save ETH as Ether | American Mega Bank Is Dumping Its Ethereum Holdings, Here\u2019s  | Can Ethereum avoid a breakdown as momentum weakens near $2,1"
+      },
+      {
+        "agent_name": "OnChain",
+        "direction": "HOLD",
+        "confidence": 0.0,
+        "reasoning": "On-chain fetch failed"
+      },
+      {
+        "agent_name": "MacroCrypto",
+        "direction": "SHORT",
+        "confidence": 0.69,
+        "reasoning": "Macro: Fear (30) -> SHORT | BTC dom=58.3%"
+      }
+    ],
+    "debate_transcript": "ChronosTechnical: HOLD (conf=0.83) \u2014 Chronos-2(v2): HOLD (p=0.83) | LONG=0.05 SHORT=0.12 HOLD=0.83 | 96 candles, ETH/USDT\nXGBTechnical: HOLD (conf=0.00) \u2014 XGB: HOLD @ 0.36 \u2014 below threshold\nNewsSentiment: SHORT (conf=0.80) \u2014 Sentiment score: -0.30. Top: Ethereum Community Pushes for $1B Group to Save ETH as Ether | American Mega Bank Is Dumping Its Ethereum Holdings, Here\u2019s  | Can Ethereum avoid a breakdown as momentum weakens near $2,1\nOnChain: HOLD (conf=0.00) \u2014 On-chain fetch failed\nMacroCrypto: SHORT (conf=0.69) \u2014 Macro: Fear (30) -> SHORT | BTC dom=58.3%\n\n[Bull] \n[Bear] \n[Adjudicator] ",
+    "rr_ratio": 1.8001338389471324
+  },
+  {
+    "id": "sig_20260525_111057_5cc06e",
+    "market": "crypto",
+    "ticker": "BNB/USDT",
+    "direction": "SHORT",
+    "entry_price": 713.74,
+    "target_price": 702.18,
+    "stop_price": 720.16,
+    "confidence": 0.745,
+    "position_size_inr": 2000.0,
+    "generated_at": "2026-05-25T11:11:27.304224+00:00",
+    "executed": false,
+    "outcome": "PENDING",
+    "outcome_price": null,
+    "outcome_at": null,
+    "hypothetical_pnl_pct": null,
+    "hypothetical_pnl_inr": null,
+    "agent_votes": [
+      {
+        "agent_name": "ChronosTechnical",
+        "direction": "HOLD",
+        "confidence": 0.7855228781700134,
+        "reasoning": "Chronos-2(v2): HOLD (p=0.79) | LONG=0.06 SHORT=0.15 HOLD=0.79 | 96 candles, BNB/USDT"
+      },
+      {
+        "agent_name": "XGBTechnical",
+        "direction": "HOLD",
+        "confidence": 0.0,
+        "reasoning": "XGB: HOLD @ 0.62 \u2014 below threshold"
+      },
+      {
+        "agent_name": "NewsSentiment",
+        "direction": "SHORT",
+        "confidence": 0.8,
+        "reasoning": "Sentiment score: -0.30. Top: Kenya's GenZ protests resume as 2026 finance bill imposes ha | BNB Chain\u2019s Speed Upgrades Could Fuel Its AI Growth | TrapDoor malware targets 34 crypto and AI packages"
+      },
+      {
+        "agent_name": "OnChain",
+        "direction": "HOLD",
+        "confidence": 0.0,
+        "reasoning": "On-chain fetch failed"
+      },
+      {
+        "agent_name": "MacroCrypto",
+        "direction": "SHORT",
+        "confidence": 0.69,
+        "reasoning": "Macro: Fear (30) -> SHORT | BTC dom=58.3%"
+      }
+    ],
+    "debate_transcript": "ChronosTechnical: HOLD (conf=0.79) \u2014 Chronos-2(v2): HOLD (p=0.79) | LONG=0.06 SHORT=0.15 HOLD=0.79 | 96 candles, BNB/USDT\nXGBTechnical: HOLD (conf=0.00) \u2014 XGB: HOLD @ 0.62 \u2014 below threshold\nNewsSentiment: SHORT (conf=0.80) \u2014 Sentiment score: -0.30. Top: Kenya's GenZ protests resume as 2026 finance bill imposes ha | BNB Chain\u2019s Speed Upgrades Could Fuel Its AI Growth | TrapDoor malware targets 34 crypto and AI packages\nOnChain: HOLD (conf=0.00) \u2014 On-chain fetch failed\nMacroCrypto: SHORT (conf=0.69) \u2014 Macro: Fear (30) -> SHORT | BTC dom=58.3%\n\n[Bull] \n[Bear] \n[Adjudicator] ",
+    "rr_ratio": 1.8006230529595222
+  },
+  {
+    "id": "sig_20260525_162503_6b1f13",
+    "market": "crypto",
+    "ticker": "ETH/USDT",
+    "direction": "SHORT",
+    "entry_price": 3381.04,
+    "target_price": 3300.34,
+    "stop_price": 3425.87,
+    "confidence": 0.77,
+    "position_size_inr": 2000.0,
+    "generated_at": "2026-05-25T16:25:33.672942+00:00",
+    "executed": false,
+    "outcome": "PENDING",
+    "outcome_price": null,
+    "outcome_at": null,
+    "hypothetical_pnl_pct": null,
+    "hypothetical_pnl_inr": null,
+    "agent_votes": [
+      {
+        "agent_name": "ChronosTechnical",
+        "direction": "HOLD",
+        "confidence": 0.8320916295051575,
+        "reasoning": "Chronos-2(v2): HOLD (p=0.83) | LONG=0.05 SHORT=0.12 HOLD=0.83 | 96 candles, ETH/USDT"
+      },
+      {
+        "agent_name": "XGBTechnical",
+        "direction": "HOLD",
+        "confidence": 0.0,
+        "reasoning": "XGB: HOLD @ 0.36 \u2014 below threshold"
+      },
+      {
+        "agent_name": "NewsSentiment",
+        "direction": "SHORT",
+        "confidence": 0.85,
+        "reasoning": "Sentiment score: -0.40. Top: Ethereum spot trading volume drops 45 percent in 12 days | Gnosis Safe users lose $3.2M in Base and Ethereum exploit | Vitalik Buterin Signals Shift to 'Smaller Ship' at Ethereum "
+      },
+      {
+        "agent_name": "OnChain",
+        "direction": "HOLD",
+        "confidence": 0.0,
+        "reasoning": "On-chain fetch failed"
+      },
+      {
+        "agent_name": "MacroCrypto",
+        "direction": "SHORT",
+        "confidence": 0.69,
+        "reasoning": "Macro: Fear (30) -> SHORT | BTC dom=58.2%"
+      }
+    ],
+    "debate_transcript": "ChronosTechnical: HOLD (conf=0.83) \u2014 Chronos-2(v2): HOLD (p=0.83) | LONG=0.05 SHORT=0.12 HOLD=0.83 | 96 candles, ETH/USDT\nXGBTechnical: HOLD (conf=0.00) \u2014 XGB: HOLD @ 0.36 \u2014 below threshold\nNewsSentiment: SHORT (conf=0.85) \u2014 Sentiment score: -0.40. Top: Ethereum spot trading volume drops 45 percent in 12 days | Gnosis Safe users lose $3.2M in Base and Ethereum exploit | Vitalik Buterin Signals Shift to 'Smaller Ship' at Ethereum \nOnChain: HOLD (conf=0.00) \u2014 On-chain fetch failed\nMacroCrypto: SHORT (conf=0.69) \u2014 Macro: Fear (30) -> SHORT | BTC dom=58.2%\n\n[Bull] \n[Bear] \n[Adjudicator] ",
+    "rr_ratio": 1.8001338389471324
+  }
+]

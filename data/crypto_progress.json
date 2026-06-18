@@ -1,1 +1,12 @@
-{"session_count":0,"portfolio_value_inr":100000,"open_positions":[],"signal_history":[],"agent_learnings":"","last_run":null}
+{
+  "session_count": 3,
+  "portfolio_value_inr": 100000.0,
+  "open_positions": [],
+  "signal_history": [
+    "sig_20260525_105550_c0f2f7",
+    "sig_20260525_111057_5cc06e",
+    "sig_20260525_162503_6b1f13"
+  ],
+  "agent_learnings": "",
+  "last_run": "2026-05-25T16:25:33.688792+00:00"
+}

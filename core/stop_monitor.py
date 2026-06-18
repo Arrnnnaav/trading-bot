@@ -134,9 +134,10 @@ class StopMonitor:
                 position.ticker,
                 exc,
             )
-            await self.telegram_bot.send_error(
-                f"Stop close failed for {position.ticker}: {exc}"
-            )
+            if self.telegram_bot is not None:
+                await self.telegram_bot.send_error(
+                    f"Stop close failed for {position.ticker}: {exc}"
+                )
             return
 
         # Step 2: broker succeeded — update in-memory state and persist.
@@ -177,27 +178,28 @@ class StopMonitor:
                     exc,
                 )
 
-        # Step 4: notify Telegram.
-        try:
-            if hasattr(self.telegram_bot, "send_position_closed"):
-                await self.telegram_bot.send_position_closed(
-                    ticker=position.ticker,
-                    close_price=current_price,
-                    pnl_pct=pnl,
-                    pnl_inr=pnl_inr,
-                    market=market,
-                    reason=reason,
-                )
-            else:
-                await self.telegram_bot.send_stop_hit(
-                    ticker=position.ticker,
-                    close_price=current_price,
-                    pnl_pct=pnl,
-                    pnl_inr=pnl_inr,
-                    market=market,
-                )
-        except Exception as exc:
-            _LOG.warning("Telegram notify failed for %s: %s", position.ticker, exc)
+        # Step 4: notify Telegram (optional — None when running without Telegram).
+        if self.telegram_bot is not None:
+            try:
+                if hasattr(self.telegram_bot, "send_position_closed"):
+                    await self.telegram_bot.send_position_closed(
+                        ticker=position.ticker,
+                        close_price=current_price,
+                        pnl_pct=pnl,
+                        pnl_inr=pnl_inr,
+                        market=market,
+                        reason=reason,
+                    )
+                else:
+                    await self.telegram_bot.send_stop_hit(
+                        ticker=position.ticker,
+                        close_price=current_price,
+                        pnl_pct=pnl,
+                        pnl_inr=pnl_inr,
+                        market=market,
+                    )
+            except Exception as exc:
+                _LOG.warning("Telegram notify failed for %s: %s", position.ticker, exc)
 
     async def run_once(self):
         for market, state in self.harness_states.items():

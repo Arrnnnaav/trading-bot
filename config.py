@@ -95,14 +95,6 @@ class Config:
 
     def validate_for_runtime(self) -> list[str]:
         errors: list[str] = []
-        if not self.telegram_token:
-            errors.append("TELEGRAM_TOKEN is required")
-        if self.enable_india and not self.telegram_india_chat_id:
-            errors.append("TELEGRAM_INDIA_CHAT_ID is required when ENABLE_INDIA=true")
-        if self.enable_india and not self.telegram_allowed_user_ids:
-            errors.append(
-                "TELEGRAM_ALLOWED_USER_IDS is required when ENABLE_INDIA=true"
-            )
         if self.enable_india and not self.paper_trading:
             has_zerodha = self.zerodha_api_key and self.zerodha_access_token
             has_upstox = self.upstox_api_key and self.upstox_access_token

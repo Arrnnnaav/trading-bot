@@ -1,1 +1,11 @@
-{"session_count":0,"portfolio_value_inr":100000,"open_positions":[],"signal_history":[],"agent_learnings":"","last_run":null}
+{
+  "session_count": 0,
+  "portfolio_value_inr": 99955.35714285714,
+  "daily_realized_pnl_inr": -44.642857142857146,
+  "weekly_realized_pnl_inr": -44.642857142857146,
+  "consecutive_losses": 1,
+  "open_positions": [],
+  "signal_history": [],
+  "agent_learnings": "",
+  "last_run": null
+}

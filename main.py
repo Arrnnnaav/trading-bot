@@ -14,7 +14,6 @@ from core.models import Market
 from core.signal_aggregator import SignalAggregator
 from core.signal_tracker import SignalTracker
 from core.stop_monitor import StopMonitor
-from tg_bot.bot import TelegramBot
 from dashboard.server import app as dashboard_app
 
 logging.basicConfig(
@@ -68,21 +67,9 @@ def build_components():
             "Set at least one to true."
         )
 
-    telegram_bot = TelegramBot(
-        harness_states=harness_states,
-        upstox_broker=india_broker,
-        signal_aggregator=aggregator,
-    )
-
-    if india_intraday_harness:
-        india_intraday_harness.telegram_bot = telegram_bot
-    if india_positional_harness:
-        india_positional_harness.telegram_bot = telegram_bot
-
     return (
         india_intraday_harness,
         india_positional_harness,
-        telegram_bot,
         aggregator,
         harness_states,
         india_broker,
@@ -155,7 +142,6 @@ async def main():
     (
         india_intraday_harness,
         india_positional_harness,
-        telegram_bot,
         aggregator,
         harness_states,
         india_broker,
@@ -166,8 +152,8 @@ async def main():
     print("=" * 50)
     print("Trading Bot v2 — India Index Options")
     print(f"  Dashboard:  http://{config.dashboard_host}:{config.dashboard_port}")
-    print("  Telegram:   polling active")
     print(f"  Mode:       {'PAPER TRADING' if config.paper_trading else 'LIVE'}")
+    print("  Telegram:   disabled (auto-execute mode)")
     print(f"  Strategy:   {config.strategy_profile}")
     print(
         f"  Harnesses:  "
@@ -182,15 +168,12 @@ async def main():
         india_positional_harness.start()
 
     data_scheduler.start()
-    _LOG.info(
-        "Data scheduler started: FII/DII@19:00 IST, news@every 30min 09:00-15:30 IST"
-    )
 
     tracker = SignalTracker(aggregator, india_broker)
     monitor = StopMonitor(
         india_broker=india_broker,
         harness_states=harness_states,
-        telegram_bot=telegram_bot,
+        telegram_bot=None,
         signal_aggregator=aggregator,
         intraday_force_exit_time=config.intraday_force_exit,
     )
@@ -207,7 +190,6 @@ async def main():
     tasks = [
         asyncio.create_task(tracker.run_forever(900)),
         asyncio.create_task(monitor.run_forever(300)),
-        asyncio.create_task(asyncio.to_thread(telegram_bot.run_polling)),
     ]
 
     try:
@@ -216,7 +198,6 @@ async def main():
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
-        server.should_exit = True
         if data_scheduler.running:
             data_scheduler.shutdown(wait=False)
         if india_intraday_harness and india_intraday_harness.scheduler.running:
