@@ -49,6 +49,7 @@ def _train_lgb(
 
 
 def _objective(trial, X_train, y_train, X_val, y_val) -> float:
+    n_estimators = trial.suggest_int("n_estimators", 100, 500)
     params = {
         "num_leaves": trial.suggest_int("num_leaves", 16, 127),
         "learning_rate": trial.suggest_float("learning_rate", 1e-3, 0.3, log=True),
@@ -58,7 +59,9 @@ def _objective(trial, X_train, y_train, X_val, y_val) -> float:
         "bagging_fraction": trial.suggest_float("bagging_fraction", 0.5, 1.0),
         "bagging_freq": 1,
     }
-    model = _train_lgb(X_train, y_train, X_val, y_val, n_estimators=200, **params)
+    model = _train_lgb(
+        X_train, y_train, X_val, y_val, n_estimators=n_estimators, **params
+    )
     preds = model.predict(X_val)
     return f1_score(y_val, preds, average="macro", zero_division=0)
 
@@ -104,7 +107,7 @@ def train(
     # Final model: train on train+val combined with best params
     X_full = np.concatenate([X_train, X_val])
     y_full = np.concatenate([y_train, y_val])
-    final_model = _train_lgb(X_full, y_full, n_estimators=500, **best_params)
+    final_model = _train_lgb(X_full, y_full, **best_params)
 
     # Evaluate on held-out test set
     test_preds = final_model.predict(X_test)

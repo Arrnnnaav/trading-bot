@@ -239,6 +239,24 @@ def load_india_data(
         df = compute_features(df, fii_dir=fii_dir)
         df = label_candles_india(df)
         df = df.dropna(subset=["rsi_14", "macd_line", "label"])
+        # Also drop rows with NaN in any feature column (EMA50 needs ~50 bars warmup, ret_20d needs 20)
+        feature_cols = [
+            c
+            for c in df.columns
+            if c
+            not in {
+                "label",
+                "date",
+                "symbol",
+                "open_time",
+                "open",
+                "high",
+                "low",
+                "close",
+                "volume",
+            }
+        ]
+        df = df.dropna(subset=feature_cols)
         dfs.append(df)
 
     if not dfs:
