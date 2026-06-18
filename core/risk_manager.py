@@ -62,7 +62,17 @@ class RiskManager:
         confidence: float,
         klines: list[dict],
         votes: list[AgentVote] | None = None,
+        vix: float | None = None,
+        minutes_to_expiry: int | None = None,
     ) -> tuple[bool, str]:
+        # VIX gate
+        if vix is not None and vix > config.india_vix_gate:
+            return False, f"India VIX {vix:.1f} above gate {config.india_vix_gate:.1f}"
+
+        # Expiry proximity gate (intraday only)
+        if minutes_to_expiry is not None and minutes_to_expiry < 120:
+            return False, f"Less than 2hr to expiry ({minutes_to_expiry}min remaining)"
+
         if len(state.open_positions) >= config.max_open_positions_per_market:
             return (
                 False,
