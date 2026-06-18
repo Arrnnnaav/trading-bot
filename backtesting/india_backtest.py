@@ -149,3 +149,60 @@ def _apply_theta_decay(premium: float, iv_annual: float, days_held: int) -> floa
     daily_burn = premium * (iv_annual / math.sqrt(252.0))
     decayed = premium - daily_burn * days_held
     return max(0.0, decayed)
+
+
+def _simulate_position(
+    entry_premium: float,
+    daily_closes: list[float],
+    iv_annual: float,
+    lot_size: int,
+    target_mult: float = TARGET_MULT,
+    stop_pct: float = STOP_LOSS_PCT,
+    max_days: int = MAX_HOLD_DAYS,
+) -> dict:
+    """
+    Simulate one options position from entry to exit.
+
+    Steps through daily_closes applying cumulative theta decay each day.
+    Checks stop and target against the decayed premium.
+
+    Returns dict:
+      exit_reason  : "TARGET_HIT" | "STOP_HIT" | "TIME_EXIT"
+      hold_days    : int
+      exit_premium : float
+      pnl_pct      : float  — (exit_premium - entry_premium) / entry_premium
+      pnl_inr      : float  — gross P&L in ₹ net of round-trip transaction cost
+    """
+    stop_level = entry_premium * (1.0 - stop_pct)
+    target_level = entry_premium * target_mult
+    cap = min(max_days, len(daily_closes))
+
+    exit_reason = "TIME_EXIT"
+    hold_days = cap
+
+    for day in range(1, cap + 1):
+        current_premium = _apply_theta_decay(entry_premium, iv_annual, day)
+        if current_premium <= stop_level:
+            exit_reason = "STOP_HIT"
+            hold_days = day
+            break
+        if current_premium >= target_level:
+            exit_reason = "TARGET_HIT"
+            hold_days = day
+            break
+
+    exit_premium = _apply_theta_decay(entry_premium, iv_annual, hold_days)
+    txn_cost = _calc_transaction_cost(entry_premium, lot_size)
+    gross_pnl_inr = (exit_premium - entry_premium) * lot_size
+    pnl_inr = gross_pnl_inr - txn_cost
+    pnl_pct = (
+        (exit_premium - entry_premium) / entry_premium if entry_premium > 0 else 0.0
+    )
+
+    return {
+        "exit_reason": exit_reason,
+        "hold_days": hold_days,
+        "exit_premium": exit_premium,
+        "pnl_pct": pnl_pct,
+        "pnl_inr": pnl_inr,
+    }

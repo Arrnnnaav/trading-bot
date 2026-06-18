@@ -1,10 +1,11 @@
-"""Tests for backtesting/india_backtest.py — Task 1: cost model."""
+"""Tests for backtesting/india_backtest.py — Task 1: cost model + Task 2: position simulator."""
 
 import pytest
 from backtesting.india_backtest import (
     _calc_entry_premium,
     _calc_transaction_cost,
     _apply_theta_decay,
+    _simulate_position,
     BacktestResult,
     BROKERAGE_PER_ORDER,
 )
@@ -116,3 +117,86 @@ class TestBacktestResult:
         assert r.year == 2020
         assert r.sharpe == pytest.approx(1.8)
         assert r.monthly_pnl["2020-01"] == 5000.0
+
+
+class TestSimulatePosition:
+    def test_target_hit_day_1(self):
+        # Premium decays via theta, so to hit a target we need target < entry.
+        # With negligible theta (iv=0.00001), premium barely decays.
+        # Set target_mult=0.99999 so target is 99.999, and premium stays above it.
+        # Should hit TARGET_HIT on day 1 (or 2).
+        result = _simulate_position(
+            entry_premium=100.0,
+            daily_closes=[22100.0, 22200.0],
+            iv_annual=0.00001,  # negligible theta
+            lot_size=65,
+            target_mult=0.99999,  # target below entry due to theta decay
+            stop_pct=0.35,
+            max_days=10,
+        )
+        assert result["exit_reason"] == "TARGET_HIT"
+        assert result["hold_days"] >= 1
+
+    def test_stop_hit(self):
+        # High theta eats the premium quickly
+        result = _simulate_position(
+            entry_premium=10.0,
+            daily_closes=[22000.0] * 20,
+            iv_annual=5.0,  # extreme theta to guarantee stop
+            lot_size=65,
+            target_mult=2.0,
+            stop_pct=0.35,
+            max_days=20,
+        )
+        assert result["exit_reason"] == "STOP_HIT"
+
+    def test_time_exit(self):
+        result = _simulate_position(
+            entry_premium=200.0,
+            daily_closes=[22000.0] * 10,
+            iv_annual=0.15,
+            lot_size=65,
+            target_mult=10.0,  # unreachable target
+            stop_pct=0.50,  # stop well below likely decay path
+            max_days=5,
+        )
+        assert result["exit_reason"] == "TIME_EXIT"
+        assert result["hold_days"] == 5
+
+    def test_pnl_inr_net_of_costs(self):
+        # Check pnl_inr accounts for costs
+        result = _simulate_position(
+            entry_premium=200.0,
+            daily_closes=[22000.0] * 5,
+            iv_annual=0.001,  # negligible decay
+            lot_size=65,
+            target_mult=10.0,
+            stop_pct=0.001,
+            max_days=3,
+        )
+        cost = _calc_transaction_cost(200.0, 65)
+        gross = (result["exit_premium"] - 200.0) * 65
+        assert abs(result["pnl_inr"] - (gross - cost)) < 0.01
+
+    def test_pnl_pct_definition(self):
+        result = _simulate_position(
+            entry_premium=200.0,
+            daily_closes=[22000.0] * 3,
+            iv_annual=0.001,
+            lot_size=65,
+            target_mult=10.0,
+            stop_pct=0.001,
+            max_days=3,
+        )
+        expected_pct = (result["exit_premium"] - 200.0) / 200.0
+        assert abs(result["pnl_pct"] - expected_pct) < 0.0001
+
+    def test_no_daily_closes_returns_time_exit_day_0(self):
+        result = _simulate_position(
+            entry_premium=100.0,
+            daily_closes=[],
+            iv_annual=0.15,
+            lot_size=65,
+        )
+        assert result["exit_reason"] == "TIME_EXIT"
+        assert result["hold_days"] == 0
