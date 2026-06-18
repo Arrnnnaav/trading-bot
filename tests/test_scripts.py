@@ -51,3 +51,27 @@ def test_fetch_historical_incremental_append(tmp_path):
     df = pd.read_parquet(tmp_path / "NSEI.parquet")
     # Incremental append deduplicates by date — should not double rows
     assert len(df) == 5
+
+
+def test_fetch_fii_dii_creates_json(tmp_path):
+    import pytest
+
+    mock_data = {
+        "date": "18-Jun-2026",
+        "fii_net_purchase_sales": "2500.50",
+        "dii_net_purchase_sales": "-800.25",
+    }
+    with patch(
+        "scripts.fetch_fii_dii.nsefin.nse.get_fii_dii_activity", return_value=mock_data
+    ):
+        from scripts.fetch_fii_dii import fetch_fii_dii
+
+        fetch_fii_dii(data_dir=tmp_path)
+
+    files = list(tmp_path.glob("*.json"))
+    assert len(files) == 1
+    import json
+
+    data = json.loads(files[0].read_text())
+    assert data["fii_net_cr"] == pytest.approx(2500.50)
+    assert data["dii_net_cr"] == pytest.approx(-800.25)
