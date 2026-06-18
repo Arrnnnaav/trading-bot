@@ -1,57 +1,134 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Trading Bot — Live Feed</title>
-  <style>
-    body { font-family: monospace; background: #0d1117; color: #e6edf3; padding: 20px; }
-    nav a { color: #58a6ff; margin-right: 20px; text-decoration: none; }
-    .signal-card { border: 1px solid #30363d; border-radius: 8px; padding: 16px; margin: 10px 0; max-width: 500px; }
-    .LONG { border-left: 4px solid #3fb950; }
-    .SHORT { border-left: 4px solid #f85149; }
-    .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; }
-    .PENDING { background: #388bfd22; color: #58a6ff; }
-    .TARGET_HIT { background: #3fb95022; color: #3fb950; }
-    .STOP_HIT { background: #f8514922; color: #f85149; }
-    .EXPIRED { background: #8b949e22; color: #8b949e; }
-    h2 { color: #58a6ff; }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trading Bot — Overview</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f1117;color:#e0e0e0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh}
+nav{display:flex;align-items:center;gap:20px;padding:0 24px;height:52px;background:#1a1d2e;border-bottom:1px solid #2a2d3e}
+.brand{font-weight:700;color:#fff;font-size:15px;margin-right:8px}
+nav a{color:#8888aa;text-decoration:none;font-size:13px;padding-bottom:3px}
+nav a.active{color:#00d4aa;border-bottom:2px solid #00d4aa}
+.spacer{flex:1}
+.live-status{display:flex;align-items:center;gap:6px;font-size:12px;color:#00d4aa}
+.live-dot{width:7px;height:7px;border-radius:50%;background:#00d4aa;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.paper-badge{background:#ff8c0018;color:#ff8c00;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;border:1px solid #ff8c0033}
+#clock{font-size:11px;color:#555;font-family:monospace}
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;padding:20px 24px}
+.card{background:#1a1d2e;border:1px solid #2a2d3e;border-radius:8px;padding:18px 20px}
+.stat-label{font-size:11px;color:#555;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
+.stat-value{font-size:26px;font-weight:700}
+.pos{color:#00d4aa}.neg{color:#ff4d6d}.neu{color:#e0e0e0}
+section{padding:0 24px 20px}
+section h2{font-size:11px;color:#555;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px}
+.pos-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
+.pos-card{background:#1a1d2e;border:1px solid #2a2d3e;border-radius:6px;padding:14px 16px}
+.pos-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.pos-ticker{font-weight:700;font-size:15px}
+.dir{font-size:11px;font-weight:600;padding:2px 7px;border-radius:3px}
+.dir-l{background:#00d4aa18;color:#00d4aa}.dir-s{background:#ff4d6d18;color:#ff4d6d}
+.pos-line{font-size:12px;color:#666;margin-top:3px}
+.feed-wrap{background:#1a1d2e;border:1px solid #2a2d3e;border-radius:8px;overflow:hidden}
+.feed-head{display:grid;grid-template-columns:65px 90px 60px 1fr 130px;padding:10px 16px;border-bottom:1px solid #2a2d3e;font-size:10px;color:#555;text-transform:uppercase;letter-spacing:1px}
+.feed-row{display:grid;grid-template-columns:65px 90px 60px 1fr 130px;padding:10px 16px;border-bottom:1px solid #1e2130;font-size:12px;font-family:monospace}
+.feed-row:last-child{border-bottom:none}
+.ft{color:#555}.fl{color:#00d4aa}.fs{color:#ff4d6d}.fh{color:#444}
+.fex{color:#00d4aa;text-align:right}.fno{color:#444;text-align:right}
+.empty{padding:28px;text-align:center;color:#444;font-size:13px}
+</style>
 </head>
 <body>
-  <nav>
-    <a href="/">Live Feed</a>
-    <a href="/history">Signal History</a>
-    <a href="/performance">Performance</a>
-    <a href="/positions">Open Positions</a>
-  </nav>
+<nav>
+  <span class="brand">Trading Bot</span>
+  <a href="/" class="active">Overview</a>
+  <a href="/trades">Trades</a>
+  <a href="/performance">Performance</a>
+  <span class="spacer"></span>
+  <div class="live-status"><div class="live-dot"></div>LIVE</div>
+  <span id="clock"></span>
+  <span class="paper-badge">PAPER</span>
+</nav>
+
+<div class="stat-grid">
+  <div class="card"><div class="stat-label">Portfolio Value</div><div class="stat-value neu" id="stat-port">&#x20B9;1,00,000</div></div>
+  <div class="card"><div class="stat-label">Today P&amp;L</div><div class="stat-value neu" id="stat-today">&#x20B9;&#x2014;</div></div>
+  <div class="card"><div class="stat-label">Open Positions</div><div class="stat-value neu" id="stat-open">&#x2014;</div></div>
+  <div class="card"><div class="stat-label">Signals Today</div><div class="stat-value neu" id="stat-sigs">&#x2014;</div></div>
+</div>
+
+<section>
+  <h2>Open Positions</h2>
+  <div class="pos-grid" id="pos-grid"><div class="empty">No open positions</div></div>
+</section>
+
+<section>
   <h2>Live Signal Feed</h2>
-  <div id="feed"></div>
-  <script>
-    const ws = new WebSocket(`ws://${location.host}/ws/signals`);
-    ws.onmessage = (e) => {
-      const msg = JSON.parse(e.data);
-      if (msg.type === 'signal') renderCard(msg.data);
-    };
+  <div class="feed-wrap">
+    <div class="feed-head"><span>Time</span><span>Ticker</span><span>Dir</span><span>Conf</span><span style="text-align:right">Status</span></div>
+    <div id="feed-body"><div class="empty">Waiting for signals&#x2026;</div></div>
+  </div>
+</section>
 
-    function renderCard(s) {
-      const div = document.createElement('div');
-      div.className = `signal-card ${s.direction}`;
-      const pnl = s.hypothetical_pnl_inr != null
-        ? `<br>P&L: ${s.hypothetical_pnl_pct > 0 ? '🟢' : '🔴'} ₹${s.hypothetical_pnl_inr?.toFixed(0)} (${(s.hypothetical_pnl_pct * 100)?.toFixed(1)}%)`
-        : '';
-      div.innerHTML = `
-        <strong>${s.direction} ${s.ticker}</strong>
-        <span class="badge ${s.outcome}" style="float:right">${s.outcome}</span><br>
-        Entry ₹${s.entry_price?.toFixed(1)} → Target ₹${s.target_price?.toFixed(1)} | Stop ₹${s.stop_price?.toFixed(1)}<br>
-        Confidence: ${(s.confidence * 100).toFixed(0)}% | Size: ₹${s.position_size_inr?.toFixed(0)}
-        ${pnl}
-        <br><small style="color:#8b949e">${new Date(s.generated_at).toLocaleString()}</small>
-      `;
-      document.getElementById('feed').prepend(div);
-    }
+<script>
+const IST = 5.5 * 3600000;
+const fmt = v => v == null ? '—' : (v >= 0 ? '+₹' : '-₹') + Math.abs(v).toLocaleString('en-IN', {maximumFractionDigits:0});
+const fmtT = iso => { if(!iso) return '—'; const d = new Date(new Date(iso).getTime()+IST); return d.toISOString().slice(11,16); };
+const today = () => new Date().toISOString().slice(0,10);
 
-    fetch('/api/signals?limit=20').then(r => r.json()).then(signals => {
-      signals.reverse().forEach(renderCard);
-    });
-  </script>
+function tick() {
+  const d = new Date(Date.now()+IST);
+  document.getElementById('clock').textContent = d.toISOString().slice(11,19)+' IST';
+}
+setInterval(tick,1000); tick();
+
+async function refresh() {
+  try {
+    const [pos, trades] = await Promise.all([
+      fetch('/api/open-positions').then(r=>r.json()),
+      fetch('/api/trades').then(r=>r.json()),
+    ]);
+    document.getElementById('stat-open').textContent = pos.length;
+    const t = today();
+    const todayPnl = trades.filter(x=>x.entry_time&&x.entry_time.startsWith(t)&&x.outcome!=='PENDING').reduce((s,x)=>s+(x.pnl_inr||0),0);
+    const todayEl = document.getElementById('stat-today');
+    todayEl.textContent = fmt(todayPnl);
+    todayEl.className = 'stat-value '+(todayPnl>=0?'pos':'neg');
+    document.getElementById('stat-sigs').textContent = trades.filter(x=>x.entry_time&&x.entry_time.startsWith(t)).length;
+
+    const grid = document.getElementById('pos-grid');
+    if (!pos.length) { grid.innerHTML='<div class="empty">No open positions</div>'; return; }
+    grid.innerHTML = pos.map(p=>`
+      <div class="pos-card">
+        <div class="pos-head"><span class="pos-ticker">${p.ticker}</span>
+        <span class="dir ${p.direction==='LONG'?'dir-l':'dir-s'}">${p.direction}</span></div>
+        <div class="pos-line">Entry ₹${(p.entry_price||0).toLocaleString('en-IN')}</div>
+        <div class="pos-line">Target ₹${(p.target_price||0).toLocaleString('en-IN')} · Stop ₹${(p.stop_price||0).toLocaleString('en-IN')}</div>
+        <div class="pos-line">Opened ${fmtT(p.opened_at)} IST &nbsp;·&nbsp; <span style="color:#00d4aa">OPEN</span></div>
+      </div>`).join('');
+  } catch(e) { console.error(e); }
+}
+
+const rows = [];
+function addRow(sig) {
+  const dir = sig.direction||'HOLD';
+  const dc = dir==='LONG'?'fl':dir==='SHORT'?'fs':'fh';
+  const conf = sig.confidence?(sig.confidence*100).toFixed(0)+'%':'—';
+  const st = dir!=='HOLD'?'<span class="fex">✅ AUTO-EXECUTED</span>':'<span class="fno">—</span>';
+  rows.unshift(`<div class="feed-row"><span class="ft">${fmtT(sig.generated_at||new Date().toISOString())}</span><span>${sig.ticker||'—'}</span><span class="${dc}">${dir}</span><span style="color:#666">${conf}</span>${st}</div>`);
+  if(rows.length>50) rows.pop();
+  document.getElementById('feed-body').innerHTML = rows.join('');
+}
+
+function connectWS() {
+  const ws = new WebSocket(`ws://${location.host}/ws/signals`);
+  ws.onmessage = e => { const m=JSON.parse(e.data); if(m.type==='signal') addRow(m.data); };
+  ws.onclose = () => setTimeout(connectWS,3000);
+}
+
+refresh(); setInterval(refresh,30000); connectWS();
+</script>
 </body>
 </html>
