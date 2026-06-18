@@ -77,8 +77,6 @@ class IndiaIntradayHarness(BaseHarness):
                     continue
                 await self.run_session(ticker, klines, expiry=expiry)
             except Exception as exc:
-                import logging
-
                 logging.getLogger(__name__).warning(
                     "Intraday session failed for %s: %s", ticker, exc
                 )
