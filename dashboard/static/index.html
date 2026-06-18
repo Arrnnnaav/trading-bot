@@ -76,7 +76,7 @@ section h2{font-size:11px;color:#555;text-transform:uppercase;letter-spacing:1px
 const IST = 5.5 * 3600000;
 const fmt = v => v == null ? '—' : (v >= 0 ? '+₹' : '-₹') + Math.abs(v).toLocaleString('en-IN', {maximumFractionDigits:0});
 const fmtT = iso => { if(!iso) return '—'; const d = new Date(new Date(iso).getTime()+IST); return d.toISOString().slice(11,16); };
-const today = () => new Date().toISOString().slice(0,10);
+const today = () => new Date(Date.now() + IST).toISOString().slice(0, 10);
 
 function tick() {
   const d = new Date(Date.now()+IST);
@@ -92,11 +92,11 @@ async function refresh() {
     ]);
     document.getElementById('stat-open').textContent = pos.length;
     const t = today();
-    const todayPnl = trades.filter(x=>x.entry_time&&x.entry_time.startsWith(t)&&x.outcome!=='PENDING').reduce((s,x)=>s+(x.pnl_inr||0),0);
+    const todayPnl = trades.filter(x => x.entry_time && x.entry_time.startsWith(t) && ['TARGET_HIT','STOP_HIT','EXPIRED'].includes(x.outcome)).reduce((s,x)=>s+(x.pnl_inr||0),0);
     const todayEl = document.getElementById('stat-today');
     todayEl.textContent = fmt(todayPnl);
     todayEl.className = 'stat-value '+(todayPnl>=0?'pos':'neg');
-    document.getElementById('stat-sigs').textContent = trades.filter(x=>x.entry_time&&x.entry_time.startsWith(t)).length;
+    document.getElementById('stat-sigs').textContent = trades.filter(x => x.entry_time && x.entry_time.startsWith(t) && ['TARGET_HIT','STOP_HIT','EXPIRED'].includes(x.outcome)).length;
 
     const grid = document.getElementById('pos-grid');
     if (!pos.length) { grid.innerHTML='<div class="empty">No open positions</div>'; return; }
@@ -115,7 +115,7 @@ const rows = [];
 function addRow(sig) {
   const dir = sig.direction||'HOLD';
   const dc = dir==='LONG'?'fl':dir==='SHORT'?'fs':'fh';
-  const conf = sig.confidence?(sig.confidence*100).toFixed(0)+'%':'—';
+  const conf = sig.confidence != null ? (sig.confidence*100).toFixed(0)+'%' : '—';
   const st = dir!=='HOLD'?'<span class="fex">✅ AUTO-EXECUTED</span>':'<span class="fno">—</span>';
   rows.unshift(`<div class="feed-row"><span class="ft">${fmtT(sig.generated_at||new Date().toISOString())}</span><span>${sig.ticker||'—'}</span><span class="${dc}">${dir}</span><span style="color:#666">${conf}</span>${st}</div>`);
   if(rows.length>50) rows.pop();
