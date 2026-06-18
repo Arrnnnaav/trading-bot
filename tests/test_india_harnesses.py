@@ -4,7 +4,9 @@ from unittest.mock import MagicMock, patch
 def test_intraday_harness_has_5_scheduled_times():
     from harnesses.india_intraday_harness import IndiaIntradayHarness
 
-    with patch("harnesses.india_intraday_harness.UpstoxBroker"):
+    with patch(
+        "harnesses.india_intraday_harness._build_raw_broker", return_value=MagicMock()
+    ):
         h = IndiaIntradayHarness(telegram_bot=None, signal_aggregator=MagicMock())
     jobs = h.scheduler.get_jobs()
     assert len(jobs) == 5  # 9:20, 10:15, 11:30, 13:00, 14:00
@@ -13,7 +15,9 @@ def test_intraday_harness_has_5_scheduled_times():
 def test_positional_harness_has_1_scheduled_time():
     from harnesses.india_positional_harness import IndiaPositionalHarness
 
-    with patch("harnesses.india_positional_harness.UpstoxBroker"):
+    with patch(
+        "harnesses.india_positional_harness._build_raw_broker", return_value=MagicMock()
+    ):
         h = IndiaPositionalHarness(telegram_bot=None, signal_aggregator=MagicMock())
     jobs = h.scheduler.get_jobs()
     assert len(jobs) == 1  # 9:20 only

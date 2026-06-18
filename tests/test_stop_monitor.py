@@ -109,3 +109,30 @@ async def test_close_persists_state_and_updates_signal(monkeypatch, tmp_path):
     assert state.open_positions == []
     aggregator.update_signal_outcome.assert_called_once()
     assert (tmp_path / "india.json").exists()
+
+
+@pytest.mark.asyncio
+async def test_close_position_tolerates_none_telegram_bot(tmp_path):
+    """StopMonitor must not crash when telegram_bot is None."""
+    state = HarnessState()
+    pos = make_position(entry=22400, stop=22000, target=23200)
+    state.open_positions.append(pos)
+
+    broker = MagicMock()
+    broker.get_price.return_value = 21900.0
+    broker.close_position.return_value = {"order_id": "ord_close", "status": "closed"}
+
+    aggregator = MagicMock()
+    state_path = str(tmp_path / "state.json")
+
+    monitor = StopMonitor(
+        india_broker=broker,
+        harness_states={Market.INDIA: state},
+        telegram_bot=None,  # key: None, not a mock
+        signal_aggregator=aggregator,
+        intraday_force_exit_time="23:59",
+    )
+    monitor._state_paths = {Market.INDIA: state_path}
+
+    # Must not raise AttributeError
+    await monitor._check_position(pos, Market.INDIA)
