@@ -1,0 +1,36 @@
+Starting Kronos GPU training...
+Loading data...
+Phase 1: 20 epochs, lr=0.0001, batch=64
+  ep01  loss=0.8048  val_f1=0.2421  best=0.2421
+  ep02  loss=0.8013  val_f1=0.2672  best=0.2672
+  ep03  loss=0.8016  val_f1=0.2672  best=0.2672
+  ep04  loss=0.7995  val_f1=0.2672  best=0.2672
+  ep05  loss=0.8003  val_f1=0.2672  best=0.2672
+  ep06  loss=0.7976  val_f1=0.2672  best=0.2672
+  ep07  loss=0.7983  val_f1=0.2672  best=0.2672
+  ep08  loss=0.7979  val_f1=0.2672  best=0.2672
+  ep09  loss=0.7971  val_f1=0.2672  best=0.2672
+  ep10  loss=0.7970  val_f1=0.2672  best=0.2672
+  ep11  loss=0.7973  val_f1=0.2672  best=0.2672
+  ep12  loss=0.7961  val_f1=0.2672  best=0.2672
+  ep13  loss=0.7967  val_f1=0.2672  best=0.2672
+  ep14  loss=0.7962  val_f1=0.2672  best=0.2672
+  ep15  loss=0.7958  val_f1=0.2672  best=0.2672
+  ep16  loss=0.7963  val_f1=0.2672  best=0.2672
+  ep17  loss=0.7963  val_f1=0.2672  best=0.2672
+  ep18  loss=0.7959  val_f1=0.2672  best=0.2672
+  ep19  loss=0.7963  val_f1=0.2672  best=0.2672
+  ep20  loss=0.7962  val_f1=0.2672  best=0.2672
+Phase 2: 10 epochs, lr=1e-05, batch=32, accum=4
+  ep01  val_f1=0.2672  best=0.2672
+  ep02  val_f1=0.2672  best=0.2672
+  ep03  val_f1=0.2723  best=0.2723
+  ep04  val_f1=0.2686  best=0.2723
+  ep05  val_f1=0.2672  best=0.2723
+  ep06  val_f1=0.2716  best=0.2723
+  ep07  val_f1=0.2720  best=0.2723
+  ep08  val_f1=0.2672  best=0.2723
+  ep09  val_f1=0.2705  best=0.2723
+  ep10  val_f1=0.2711  best=0.2723
+Done. Best val macro-F1: 0.2723  →  models\kronos_india\best.pt
+COMPLETE: best_val_f1=0.2723  time=147s

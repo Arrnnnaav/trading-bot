@@ -1,0 +1,110 @@
+Loading data...
+Train: 16,212  Val: 2,026  Test: 2,027
+Label dist (train): LONG=3969 SHORT=2506 HOLD=9737
+Running Optuna HPO (50 trials)...
+  0%|          | 0/50 [00:00<?, ?it/s]C:\Users\user\AppData\Local\Programs\Python\Python312\Lib\site-packages\sklearn\utils\validation.py:2691: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
+  warnings.warn(
+Best trial: 0. Best value: 0.363698:   0%|          | 0/50 [00:03<?, ?it/s]Best trial: 0. Best value: 0.363698:   2%|▏         | 1/50 [00:03<02:30,  3.08s/it]C:\Users\user\AppData\Local\Programs\Python\Python312\Lib\site-packages\sklearn\utils\validation.py:2691: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
+  warnings.warn(
+Best trial: 0. Best value: 0.363698:   2%|▏         | 1/50 [00:03<02:30,  3.08s/it]C:\Users\user\AppData\Local\Programs\Python\Python312\Lib\site-packages\sklearn\utils\validation.py:2691: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
+  warnings.warn(
+Best trial: 0. Best value: 0.363698:   4%|▍         | 2/50 [00:03<02:27,  3.08s/it]Best trial: 0. Best value: 0.363698:   6%|▌         | 3/50 [00:03<00:40,  1.16it/s]C:\Users\user\AppData\Local\Programs\Python\Python312\Lib\site-packages\sklearn\utils\validation.py:2691: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
+  warnings.warn(
+Best trial: 0. Best value: 0.363698:   6%|▌         | 3/50 [00:03<00:40,  1.16it/s]Best trial: 0. Best value: 0.363698:   8%|▊         | 4/50 [00:03<00:28,  1.61it/s]C:\Users\user\AppData\Local\Programs\Python\Python312\Lib\site-packages\sklearn\utils\validation.py:2691: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
+  warnings.warn(
+Best trial: 0. Best value: 0.363698:   8%|▊         | 4/50 [00:03<00:28,  1.61it/s]C:\Users\user\AppData\Local\Programs\Python\Python312\Lib\site-packages\sklearn\utils\validation.py:2691: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
+  warnings.warn(
+Best trial: 5. Best value: 0.364133:  10%|█         | 5/50 [00:03<00:27,  1.61it/s]Best trial: 5. Best value: 0.364133:  12%|█▏        | 6/50 [00:03<00:17,  2.50it/s]C:\Users\user\AppData\Local\Programs\Python\Python312\Lib\site-packages\sklearn\utils\validation.py:2691: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
+  warnings.warn(
+Best trial: 5. Best value: 0.364133:  12%|█▏        | 6/50 [00:03<00:17,  2.50it/s]C:\Users\user\AppData\Local\Programs\Python\Python312\Lib\site-packages\sklearn\utils\validation.py:2691: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
+  warnings.warn(
+Best trial: 5. Best value: 0.364133:  14%|█▍        | 7/50 [00:04<00:17,  2.50it/s]Best trial: 5. Best value: 0.364133:  16%|█▌        | 8/50 [00:04<00:13,  3.08it/s]C:\Users\user\AppData\Local\Programs\Python\Python312\Lib\site-packages\sklearn\utils\validation.py:2691: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
+  warnings.warn(
+Best trial: 5. Best value: 0.364133:  16%|█▌        | 8/50 [00:04<00:13,  3.08it/s]C:\Users\user\AppData\Local\Programs\Python\Python312\Lib\site-packages\sklearn\utils\validation.py:2691: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
+  warnings.warn(
+Best trial: 5. Best value: 0.364133:  18%|█▊        | 9/50 [00:04<00:13,  3.08it/s]Best trial: 5. Best value: 0.364133:  20%|██        | 10/50 [00:04<00:09,  4.09it/s]C:\Users\user\AppData\Local\Programs\Python\Python312\Lib\site-packages\sklearn\utils\validation.py:2691: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
+  warnings.warn(
+Best trial: 5. Best value: 0.364133:  20%|██        | 10/50 [00:04<00:09,  4.09it/s]Best trial: 5. Best value: 0.364133:  22%|██▏       | 11/50 [00:04<00:09,  4.27it/s]C:\Users\user\AppData\Local\Programs\Python\Python312\Lib\site-packages\sklearn\utils\validation.py:2691: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
+  warnings.warn(
+Best trial: 5. Best value: 0.364133:  22%|██▏       | 11/50 [00:04<00:09,  4.27it/s]Best trial: 5. Best value: 0.364133:  24%|██▍       | 12/50 [00:04<00:08,  4.66it/s]C:\Users\user\AppData\Local\Programs\Python\Python312\Lib\site-packages\sklearn\utils\validation.py:2691: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
+  warnings.warn(
+Best trial: 5. Best value: 0.364133:  24%|██▍       | 12/50 [00:05<00:08,  4.66it/s]Best trial: 5. Best value: 0.364133:  26%|██▌       | 13/50 [00:05<00:14,  2.48it/s]C:\Users\user\AppData\Local\Programs\Python\Python312\Lib\site-packages\sklearn\utils\validation.py:2691: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
+  warnings.warn(
+Best trial: 5. Best value: 0.364133:  26%|██▌       | 13/50 [00:07<00:14,  2.48it/s]Best trial: 5. Best value: 0.364133:  28%|██▊       | 14/50 [00:07<00:26,  1.37it/s]C:\Users\user\AppData\Local\Programs\Python\Python312\Lib\site-packages\sklearn\utils\validation.py:2691: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
+  warnings.warn(
+Best trial: 5. Best value: 0.364133:  28%|██▊       | 14/50 [00:07<00:26,  1.37it/s]Best trial: 5. Best value: 0.364133:  30%|███       | 15/50 [00:07<00:21,  1.64it/s]C:\Users\user\AppData\Local\Programs\Python\Python312\Lib\site-packages\sklearn\utils\validation.py:2691: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
+  warnings.warn(
+Best trial: 5. Best value: 0.364133:  30%|███       | 15/50 [00:07<00:21,  1.64it/s]C:\Users\user\AppData\Local\Programs\Python\Python312\Lib\site-packages\sklearn\utils\validation.py:2691: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
+  warnings.warn(
+Best trial: 5. Best value: 0.364133:  32%|███▏      | 16/50 [00:07<00:20,  1.64it/s]Best trial: 5. Best value: 0.364133:  34%|███▍      | 17/50 [00:07<00:13,  2.53it/s]C:\Users\user\AppData\Local\Programs\Python\Python312\Lib\site-packages\sklearn\utils\validation.py:2691: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
+  warnings.warn(
+Best trial: 17. Best value: 0.367295:  34%|███▍      | 17/50 [00:08<00:13,  2.53it/s]Best trial: 17. Best value: 0.367295:  36%|███▌      | 18/50 [00:08<00:10,  2.92it/s]C:\Users\user\AppData\Local\Programs\Python\Python312\Lib\site-packages\sklearn\utils\validation.py:2691: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
+  warnings.warn(
+Best trial: 17. Best value: 0.367295:  36%|███▌      | 18/50 [00:08<00:10,  2.92it/s]Best trial: 17. Best value: 0.367295:  38%|███▊      | 19/50 [00:08<00:09,  3.26it/s]C:\Users\user\AppData\Local\Programs\Python\Python312\Lib\site-packages\sklearn\utils\validation.py:2691: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
+  warnings.warn(
+Best trial: 17. Best value: 0.367295:  38%|███▊      | 19/50 [00:08<00:09,  3.26it/s]Best trial: 17. Best value: 0.367295:  40%|████      | 20/50 [00:08<00:07,  3.84it/s]C:\Users\user\AppData\Local\Programs\Python\Python312\Lib\site-packages\sklearn\utils\validation.py:2691: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
+  warnings.warn(
+Best trial: 17. Best value: 0.367295:  40%|████      | 20/50 [00:08<00:07,  3.84it/s]Best trial: 17. Best value: 0.367295:  42%|████▏     | 21/50 [00:08<00:06,  4.52it/s]C:\Users\user\AppData\Local\Programs\Python\Python312\Lib\site-packages\sklearn\utils\validation.py:2691: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
+  warnings.warn(
+Best trial: 17. Best value: 0.367295:  42%|████▏     | 21/50 [00:08<00:06,  4.52it/s]Best trial: 17. Best value: 0.367295:  44%|████▍     | 22/50 [00:08<00:06,  4.23it/s]C:\Users\user\AppData\Local\Programs\Python\Python312\Lib\site-packages\sklearn\utils\validation.py:2691: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
+  warnings.warn(
+Best trial: 17. Best value: 0.367295:  44%|████▍     | 22/50 [00:09<00:06,  4.23it/s]Best trial: 17. Best value: 0.367295:  46%|████▌     | 23/50 [00:09<00:07,  3.40it/s]C:\Users\user\AppData\Local\Programs\Python\Python312\Lib\site-packages\sklearn\utils\validation.py:2691: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
+  warnings.warn(
+Best trial: 17. Best value: 0.367295:  46%|████▌     | 23/50 [00:09<00:07,  3.40it/s]Best trial: 17. Best value: 0.367295:  48%|████▊     | 24/50 [00:09<00:10,  2.50it/s]C:\Users\user\AppData\Local\Programs\Python\Python312\Lib\site-packages\sklearn\utils\validation.py:2691: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
+  warnings.warn(
+Best trial: 17. Best value: 0.367295:  48%|████▊     | 24/50 [00:10<00:10,  2.50it/s]Best trial: 17. Best value: 0.367295:  50%|█████     | 25/50 [00:10<00:12,  1.95it/s]C:\Users\user\AppData\Local\Programs\Python\Python312\Lib\site-packages\sklearn\utils\validation.py:2691: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
+  warnings.warn(
+Best trial: 17. Best value: 0.367295:  50%|█████     | 25/50 [00:10<00:12,  1.95it/s]Best trial: 17. Best value: 0.367295:  52%|█████▏    | 26/50 [00:10<00:09,  2.53it/s]C:\Users\user\AppData\Local\Programs\Python\Python312\Lib\site-packages\sklearn\utils\validation.py:2691: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
+  warnings.warn(
+Best trial: 26. Best value: 0.370883:  52%|█████▏    | 26/50 [00:10<00:09,  2.53it/s]C:\Users\user\AppData\Local\Programs\Python\Python312\Lib\site-packages\sklearn\utils\validation.py:2691: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
+  warnings.warn(
+Best trial: 26. Best value: 0.370883:  54%|█████▍    | 27/50 [00:10<00:09,  2.53it/s]Best trial: 26. Best value: 0.370883:  56%|█████▌    | 28/50 [00:10<00:05,  4.11it/s]C:\Users\user\AppData\Local\Programs\Python\Python312\Lib\site-packages\sklearn\utils\validation.py:2691: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
+  warnings.warn(
+Best trial: 26. Best value: 0.370883:  56%|█████▌    | 28/50 [00:11<00:05,  4.11it/s]C:\Users\user\AppData\Local\Programs\Python\Python312\Lib\site-packages\sklearn\utils\validation.py:2691: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
+  warnings.warn(
+Best trial: 26. Best value: 0.370883:  58%|█████▊    | 29/50 [00:11<00:05,  4.11it/s]Best trial: 26. Best value: 0.370883:  60%|██████    | 30/50 [00:11<00:04,  4.96it/s]C:\Users\user\AppData\Local\Programs\Python\Python312\Lib\site-packages\sklearn\utils\validation.py:2691: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
+  warnings.warn(
+Best trial: 26. Best value: 0.370883:  60%|██████    | 30/50 [00:11<00:04,  4.96it/s]Best trial: 26. Best value: 0.370883:  62%|██████▏   | 31/50 [00:11<00:03,  5.06it/s]C:\Users\user\AppData\Local\Programs\Python\Python312\Lib\site-packages\sklearn\utils\validation.py:2691: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
+  warnings.warn(
+Best trial: 26. Best value: 0.370883:  62%|██████▏   | 31/50 [00:11<00:03,  5.06it/s]Best trial: 26. Best value: 0.370883:  64%|██████▍   | 32/50 [00:11<00:03,  4.79it/s]C:\Users\user\AppData\Local\Programs\Python\Python312\Lib\site-packages\sklearn\utils\validation.py:2691: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
+  warnings.warn(
+Best trial: 26. Best value: 0.370883:  64%|██████▍   | 32/50 [00:11<00:03,  4.79it/s]Best trial: 26. Best value: 0.370883:  66%|██████▌   | 33/50 [00:11<00:03,  5.16it/s]C:\Users\user\AppData\Local\Programs\Python\Python312\Lib\site-packages\sklearn\utils\validation.py:2691: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
+  warnings.warn(
+Best trial: 26. Best value: 0.370883:  66%|██████▌   | 33/50 [00:11<00:03,  5.16it/s]C:\Users\user\AppData\Local\Programs\Python\Python312\Lib\site-packages\sklearn\utils\validation.py:2691: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
+  warnings.warn(
+Best trial: 34. Best value: 0.373444:  68%|██████▊   | 34/50 [00:11<00:03,  5.16it/s]Best trial: 34. Best value: 0.373444:  70%|███████   | 35/50 [00:11<00:02,  7.16it/s]C:\Users\user\AppData\Local\Programs\Python\Python312\Lib\site-packages\sklearn\utils\validation.py:2691: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
+  warnings.warn(
+Best trial: 34. Best value: 0.373444:  70%|███████   | 35/50 [00:11<00:02,  7.16it/s]C:\Users\user\AppData\Local\Programs\Python\Python312\Lib\site-packages\sklearn\utils\validation.py:2691: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
+  warnings.warn(
+Best trial: 34. Best value: 0.373444:  72%|███████▏  | 36/50 [00:12<00:01,  7.16it/s]Best trial: 34. Best value: 0.373444:  74%|███████▍  | 37/50 [00:12<00:01,  9.08it/s]C:\Users\user\AppData\Local\Programs\Python\Python312\Lib\site-packages\sklearn\utils\validation.py:2691: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
+  warnings.warn(
+Best trial: 34. Best value: 0.373444:  74%|███████▍  | 37/50 [00:12<00:01,  9.08it/s]C:\Users\user\AppData\Local\Programs\Python\Python312\Lib\site-packages\sklearn\utils\validation.py:2691: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
+  warnings.warn(
+Best trial: 34. Best value: 0.373444:  76%|███████▌  | 38/50 [00:12<00:01,  9.08it/s]Best trial: 34. Best value: 0.373444:  78%|███████▊  | 39/50 [00:12<00:01,  7.54it/s]C:\Users\user\AppData\Local\Programs\Python\Python312\Lib\site-packages\sklearn\utils\validation.py:2691: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
+  warnings.warn(
+Best trial: 34. Best value: 0.373444:  78%|███████▊  | 39/50 [00:12<00:01,  7.54it/s]Best trial: 34. Best value: 0.373444:  80%|████████  | 40/50 [00:12<00:01,  5.07it/s]C:\Users\user\AppData\Local\Programs\Python\Python312\Lib\site-packages\sklearn\utils\validation.py:2691: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
+  warnings.warn(
+Best trial: 34. Best value: 0.373444:  80%|████████  | 40/50 [00:12<00:01,  5.07it/s]C:\Users\user\AppData\Local\Programs\Python\Python312\Lib\site-packages\sklearn\utils\validation.py:2691: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
+  warnings.warn(
+Best trial: 34. Best value: 0.373444:  82%|████████▏ | 41/50 [00:13<00:01,  5.07it/s]Best trial: 34. Best value: 0.373444:  84%|████████▍ | 42/50 [00:13<00:01,  6.24it/s]C:\Users\user\AppData\Local\Programs\Python\Python312\Lib\site-packages\sklearn\utils\validation.py:2691: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
+  warnings.warn(
+Best trial: 34. Best value: 0.373444:  84%|████████▍ | 42/50 [00:13<00:01,  6.24it/s]Best trial: 34. Best value: 0.373444:  86%|████████▌ | 43/50 [00:13<00:01,  5.66it/s]C:\Users\user\AppData\Local\Programs\Python\Python312\Lib\site-packages\sklearn\utils\validation.py:2691: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
+  warnings.warn(
+Best trial: 34. Best value: 0.373444:  86%|████████▌ | 43/50 [00:13<00:01,  5.66it/s]C:\Users\user\AppData\Local\Programs\Python\Python312\Lib\site-packages\sklearn\utils\validation.py:2691: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
+  warnings.warn(
+Best trial: 34. Best value: 0.373444:  88%|████████▊ | 44/50 [00:13<00:01,  5.66it/s]Best trial: 34. Best value: 0.373444:  90%|█████████ | 45/50 [00:13<00:00,  7.24it/s]C:\Users\user\AppData\Local\Programs\Python\Python312\Lib\site-packages\sklearn\utils\validation.py:2691: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
+  warnings.warn(
+Best trial: 34. Best value: 0.373444:  90%|█████████ | 45/50 [00:13<00:00,  7.24it/s]Best trial: 34. Best value: 0.373444:  92%|█████████▏| 46/50 [00:13<00:00,  7.30it/s]C:\Users\user\AppData\Local\Programs\Python\Python312\Lib\site-packages\sklearn\utils\validation.py:2691: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
+  warnings.warn(
+Best trial: 34. Best value: 0.373444:  92%|█████████▏| 46/50 [00:13<00:00,  7.30it/s]C:\Users\user\AppData\Local\Programs\Python\Python312\Lib\site-packages\sklearn\utils\validation.py:2691: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
+  warnings.warn(
+Best trial: 34. Best value: 0.373444:  94%|█████████▍| 47/50 [00:13<00:00,  7.30it/s]Best trial: 34. Best value: 0.373444:  96%|█████████▌| 48/50 [00:13<00:00,  8.93it/s]C:\Users\user\AppData\Local\Programs\Python\Python312\Lib\site-packages\sklearn\utils\validation.py:2691: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
+  warnings.warn(
+Best trial: 34. Best value: 0.373444:  96%|█████████▌| 48/50 [00:13<00:00,  8.93it/s]C:\Users\user\AppData\Local\Programs\Python\Python312\Lib\site-packages\sklearn\utils\validation.py:2691: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
+  warnings.warn(
+Best trial: 34. Best value: 0.373444:  98%|█████████▊| 49/50 [00:13<00:00,  8.93it/s]Best trial: 34. Best value: 0.373444: 100%|██████████| 50/50 [00:13<00:00,  9.11it/s]Best trial: 34. Best value: 0.373444: 100%|██████████| 50/50 [00:13<00:00,  3.59it/s]
+C:\Users\user\AppData\Local\Programs\Python\Python312\Lib\site-packages\sklearn\utils\validation.py:2691: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
+  warnings.warn(
+Best val macro-F1: 0.3734  params: {'n_estimators': 331, 'num_leaves': 70, 'learning_rate': 0.0025344884053661795, 'max_depth': 3, 'min_data_in_leaf': 53, 'feature_fraction': 0.9932550086523612, 'bagging_fraction': 0.5297384060047804}
+Test macro-F1: 0.3624
+Saved to models\xgb_india/
