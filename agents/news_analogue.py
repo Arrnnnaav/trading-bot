@@ -40,6 +40,8 @@ class NewsAnalogueAgent(BaseAgent):
 
             client = chromadb.PersistentClient(path=self._chroma_path)
             self._collection = client.get_collection("news_articles")
+            # Collection must be created with hnsw:space=cosine (see scripts/backfill_news.py)
+            # so that distances map to [0, 1] and 1.0 - distance == cosine similarity
             return self._collection
         except Exception:
             return None
@@ -131,7 +133,7 @@ class NewsAnalogueAgent(BaseAgent):
         try:
             with sqlite3.connect(str(db_path)) as conn:
                 row = conn.execute(
-                    "SELECT nifty_peak_to_trough_pct FROM market_events WHERE event_id = ?",
+                    "SELECT nifty_pct_change_5d FROM market_events WHERE event_id = ?",
                     (event_id,),
                 ).fetchone()
             return row[0] if row else None
