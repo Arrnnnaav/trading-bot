@@ -1,61 +1,163 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Performance</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <style>
-    body { font-family: monospace; background: #0d1117; color: #e6edf3; padding: 20px; }
-    nav a { color: #58a6ff; margin-right: 20px; text-decoration: none; }
-    .stats { display: flex; gap: 20px; flex-wrap: wrap; margin: 20px 0; }
-    .stat-card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; min-width: 140px; }
-    .stat-value { font-size: 24px; font-weight: bold; }
-    .green { color: #3fb950; }
-    .red { color: #f85149; }
-    h2, h3 { color: #58a6ff; }
-    canvas { max-width: 700px; margin: 20px 0; }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trading Bot — Performance</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f1117;color:#e0e0e0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh}
+nav{display:flex;align-items:center;gap:20px;padding:0 24px;height:52px;background:#1a1d2e;border-bottom:1px solid #2a2d3e}
+.brand{font-weight:700;color:#fff;font-size:15px;margin-right:8px}
+nav a{color:#8888aa;text-decoration:none;font-size:13px;padding-bottom:3px}
+nav a.active{color:#00d4aa;border-bottom:2px solid #00d4aa}
+.spacer{flex:1}
+.paper-badge{background:#ff8c0018;color:#ff8c00;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;border:1px solid #ff8c0033}
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;padding:20px 24px}
+.card{background:#1a1d2e;border:1px solid #2a2d3e;border-radius:8px;padding:16px 18px}
+.stat-label{font-size:10px;color:#555;text-transform:uppercase;letter-spacing:1px;margin-bottom:5px}
+.stat-value{font-size:22px;font-weight:700}
+.pos{color:#00d4aa}.neg{color:#ff4d6d}.neu{color:#e0e0e0}
+.charts{display:grid;grid-template-columns:2fr 1fr;gap:16px;padding:0 24px 24px}
+@media(max-width:700px){.charts{grid-template-columns:1fr}}
+.chart-card{background:#1a1d2e;border:1px solid #2a2d3e;border-radius:8px;padding:18px}
+.chart-title{font-size:11px;color:#555;text-transform:uppercase;letter-spacing:1px;margin-bottom:14px}
+.empty{padding:32px;text-align:center;color:#444;font-size:13px}
+canvas{max-height:280px}
+</style>
 </head>
 <body>
-  <nav>
-    <a href="/">Live Feed</a>
-    <a href="/history">Signal History</a>
-    <a href="/performance">Performance</a>
-    <a href="/positions">Open Positions</a>
-  </nav>
-  <h2>Performance Analytics</h2>
-  <div class="stats" id="stats"></div>
-  <h3>Hypothetical Portfolio Curve</h3>
-  <canvas id="hypChart"></canvas>
-  <h3>Actual Portfolio Curve</h3>
-  <canvas id="actChart"></canvas>
-  <script>
-    Promise.all([fetch('/api/performance').then(r => r.json()), fetch('/api/signals?limit=500').then(r => r.json())])
-      .then(([perf, signals]) => {
-        document.getElementById('stats').innerHTML = `
-          <div class="stat-card"><div style="color:#8b949e">Total Signals</div><div class="stat-value">${perf.total_signals}</div></div>
-          <div class="stat-card"><div style="color:#8b949e">Win Rate</div><div class="stat-value ${perf.win_rate >= 0.5 ? 'green' : 'red'}">${(perf.win_rate * 100).toFixed(1)}%</div></div>
-          <div class="stat-card"><div style="color:#8b949e">W/L</div><div class="stat-value">${perf.wins}/${perf.losses}</div></div>
-          <div class="stat-card"><div style="color:#8b949e">Hyp. P&L</div><div class="stat-value ${perf.total_hypothetical_pnl_inr >= 0 ? 'green' : 'red'}">₹${perf.total_hypothetical_pnl_inr.toFixed(0)}</div></div>
-          <div class="stat-card"><div style="color:#8b949e">Actual P&L</div><div class="stat-value ${perf.total_actual_pnl_inr >= 0 ? 'green' : 'red'}">₹${perf.total_actual_pnl_inr.toFixed(0)}</div></div>
-        `;
+<nav>
+  <span class="brand">Trading Bot</span>
+  <a href="/">Overview</a>
+  <a href="/trades">Trades</a>
+  <a href="/performance" class="active">Performance</a>
+  <span class="spacer"></span>
+  <span class="paper-badge">PAPER</span>
+</nav>
 
-        const resolved = signals.filter(s => s.outcome !== 'PENDING' && s.hypothetical_pnl_inr != null)
-                                 .sort((a, b) => new Date(a.generated_at) - new Date(b.generated_at));
+<div class="stat-grid">
+  <div class="card"><div class="stat-label">Win Rate</div><div class="stat-value neu" id="s-wr">—</div></div>
+  <div class="card"><div class="stat-label">Total P&amp;L</div><div class="stat-value neu" id="s-pnl">—</div></div>
+  <div class="card"><div class="stat-label">Avg Win</div><div class="stat-value pos" id="s-aw">—</div></div>
+  <div class="card"><div class="stat-label">Avg Loss</div><div class="stat-value neg" id="s-al">—</div></div>
+  <div class="card"><div class="stat-label">Max Drawdown</div><div class="stat-value neg" id="s-dd">—</div></div>
+  <div class="card"><div class="stat-label">Total Trades</div><div class="stat-value neu" id="s-tt">—</div></div>
+</div>
 
-        let hypBalance = 100000, actBalance = 100000;
-        const hypData = [], actData = [], labels = [];
-        for (const s of resolved) {
-          hypBalance += s.hypothetical_pnl_inr || 0;
-          if (s.executed) actBalance += s.hypothetical_pnl_inr || 0;
-          labels.push(new Date(s.generated_at).toLocaleDateString());
-          hypData.push(hypBalance);
-          actData.push(s.executed ? actBalance : null);
+<div class="charts">
+  <div class="chart-card">
+    <div class="chart-title">Equity Curve (Cumulative P&amp;L ₹)</div>
+    <div id="eq-empty" class="empty" style="display:none">No closed trades yet — equity curve will appear here.</div>
+    <canvas id="eq-chart"></canvas>
+  </div>
+  <div class="chart-card">
+    <div class="chart-title">Win / Loss Split</div>
+    <div id="dl-empty" class="empty" style="display:none">No resolved trades yet.</div>
+    <canvas id="dl-chart"></canvas>
+  </div>
+</div>
+
+<script>
+const IST = 5.5 * 3600000;
+const fmtINR = v => v==null?'—':(v>=0?'+₹':'-₹')+Math.abs(v).toLocaleString('en-IN',{maximumFractionDigits:0});
+const fmtIST = iso => { if(!iso) return ''; const d=new Date(new Date(iso).getTime()+IST); return d.toISOString().slice(0,10); };
+
+Chart.defaults.color = '#888';
+
+let eqChart=null, dlChart=null;
+
+async function load() {
+  try {
+    const [stats, curve] = await Promise.all([
+      fetch('/api/stats').then(r=>r.json()),
+      fetch('/api/equity-curve').then(r=>r.json()),
+    ]);
+
+    // Stat cards
+    const wr = stats.win_rate;
+    const wrEl = document.getElementById('s-wr');
+    wrEl.textContent = stats.resolved ? wr.toFixed(1)+'%' : '—';
+    wrEl.className = 'stat-value '+(wr>=50?'pos':wr>0?'neg':'neu');
+
+    const pEl = document.getElementById('s-pnl');
+    pEl.textContent = fmtINR(stats.total_pnl_inr);
+    pEl.className = 'stat-value '+(stats.total_pnl_inr>=0?'pos':'neg');
+
+    document.getElementById('s-aw').textContent = stats.avg_win_inr ? fmtINR(stats.avg_win_inr) : '—';
+    document.getElementById('s-al').textContent = stats.avg_loss_inr ? fmtINR(stats.avg_loss_inr) : '—';
+    document.getElementById('s-dd').textContent = stats.max_drawdown_inr ? '-₹'+stats.max_drawdown_inr.toLocaleString('en-IN',{maximumFractionDigits:0}) : '₹0';
+    document.getElementById('s-tt').textContent = stats.total_trades || 0;
+
+    // Equity curve
+    if (!curve.length) {
+      document.getElementById('eq-empty').style.display='block';
+      document.getElementById('eq-chart').style.display='none';
+    } else {
+      document.getElementById('eq-empty').style.display='none';
+      document.getElementById('eq-chart').style.display='';
+      const labels = curve.map(p=>fmtIST(p.t));
+      const data = curve.map(p=>p.pnl);
+      const ctx = document.getElementById('eq-chart').getContext('2d');
+      if (eqChart) eqChart.destroy();
+      const grad = ctx.createLinearGradient(0,0,0,280);
+      grad.addColorStop(0,'rgba(0,212,170,0.25)');
+      grad.addColorStop(1,'rgba(0,212,170,0.01)');
+      eqChart = new Chart(ctx, {
+        type:'line',
+        data:{
+          labels,
+          datasets:[{
+            data,
+            borderColor:'#00d4aa',
+            backgroundColor:grad,
+            borderWidth:2,
+            fill:true,
+            tension:0.3,
+            pointRadius:data.length>60?0:3,
+            pointHoverRadius:5,
+          }]
+        },
+        options:{
+          responsive:true,
+          plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>fmtINR(c.raw)}}},
+          scales:{
+            x:{ticks:{color:'#555',maxTicksLimit:8},grid:{color:'#2a2d3e'}},
+            y:{ticks:{color:'#555',callback:v=>'₹'+v.toLocaleString('en-IN')},grid:{color:'#2a2d3e'}}
+          }
         }
-
-        const chartOpts = { responsive: true, plugins: { legend: { labels: { color: '#e6edf3' } } }, scales: { x: { ticks: { color: '#8b949e' } }, y: { ticks: { color: '#8b949e' } } } };
-        new Chart(document.getElementById('hypChart'), { type: 'line', data: { labels, datasets: [{ label: 'Hypothetical Portfolio (₹)', data: hypData, borderColor: '#58a6ff', fill: false, pointRadius: 2 }] }, options: chartOpts });
-        new Chart(document.getElementById('actChart'), { type: 'line', data: { labels, datasets: [{ label: 'Actual Portfolio (₹)', data: actData, borderColor: '#3fb950', fill: false, pointRadius: 2, spanGaps: true }] }, options: chartOpts });
       });
-  </script>
+    }
+
+    // Donut
+    if (!stats.wins && !stats.losses) {
+      document.getElementById('dl-empty').style.display='block';
+      document.getElementById('dl-chart').style.display='none';
+    } else {
+      document.getElementById('dl-empty').style.display='none';
+      document.getElementById('dl-chart').style.display='';
+      const ctx2 = document.getElementById('dl-chart').getContext('2d');
+      if (dlChart) dlChart.destroy();
+      dlChart = new Chart(ctx2, {
+        type:'doughnut',
+        data:{
+          labels:['Wins','Losses'],
+          datasets:[{data:[stats.wins,stats.losses],backgroundColor:['#00d4aa','#ff4d6d'],borderWidth:0}]
+        },
+        options:{
+          responsive:true,
+          plugins:{
+            legend:{labels:{color:'#aaa',padding:16}},
+            tooltip:{callbacks:{label:c=>`${c.label}: ${c.raw} (${(c.raw/(stats.wins+stats.losses)*100).toFixed(1)}%)`}}
+          }
+        }
+      });
+    }
+  } catch(e) { console.error(e); }
+}
+
+load(); setInterval(load,60000);
+</script>
 </body>
 </html>
