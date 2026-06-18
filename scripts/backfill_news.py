@@ -397,7 +397,7 @@ def _insert_events(db_path: str) -> int:
     return inserted
 
 
-def _embed_headlines(collection, embedder, db_path: str) -> int:
+def _embed_headlines(collection, embedder) -> int:
     """Embed headlines into ChromaDB; skip if doc_id already present."""
     upserted = 0
     for ev in MARKET_EVENTS:
@@ -451,7 +451,7 @@ def backfill(
     embedder = _get_embedder()
 
     _LOG.info("Embedding headlines into ChromaDB...")
-    n_headlines = _embed_headlines(collection, embedder, db_path)
+    n_headlines = _embed_headlines(collection, embedder)
     _LOG.info("Upserted %d new headline documents", n_headlines)
 
     # Final counts
@@ -463,8 +463,14 @@ def backfill(
         event_count,
         chroma_count,
     )
-    assert event_count == 15, f"Expected 15 events, got {event_count}"
-    assert chroma_count >= 45, f"Expected >=45 ChromaDB docs, got {chroma_count}"
+    if event_count != 15:
+        raise RuntimeError(
+            f"Backfill incomplete: expected 15 market events in SQLite, got {event_count}"
+        )
+    if chroma_count < 45:
+        raise RuntimeError(
+            f"Backfill incomplete: expected ≥45 ChromaDB docs, got {chroma_count}"
+        )
 
 
 if __name__ == "__main__":

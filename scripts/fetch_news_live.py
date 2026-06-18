@@ -29,6 +29,18 @@ import httpx
 
 _LOG = logging.getLogger(__name__)
 
+_embedder = None
+
+
+def _get_embedder():
+    global _embedder
+    if _embedder is None:
+        from sentence_transformers import SentenceTransformer
+
+        _embedder = SentenceTransformer("all-MiniLM-L6-v2")
+    return _embedder
+
+
 _RSS_FEEDS = [
     "https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms",
     "https://www.moneycontrol.com/rss/marketreports.xml",
@@ -144,10 +156,9 @@ def _upsert_to_chroma(articles: list[dict], chroma_path: str) -> int:
     if not articles:
         return 0
     try:
-        from sentence_transformers import SentenceTransformer
         from scripts.setup_chroma import get_or_create_collection
 
-        embedder = SentenceTransformer("all-MiniLM-L6-v2")
+        embedder = _get_embedder()
         collection = get_or_create_collection(chroma_path)
 
         ids, embeddings, metadatas = [], [], []

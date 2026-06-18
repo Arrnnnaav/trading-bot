@@ -59,7 +59,7 @@ def test_fetch_fii_dii_creates_json(tmp_path):
     import json
 
     mock_nsefin = MagicMock()
-    mock_nsefin.get_fii_dii_activity.return_value = [
+    mock_nsefin.nse.get_fii_dii_activity.return_value = [
         {
             "date": "2026-06-18",
             "fii_net_value": 2500.50,

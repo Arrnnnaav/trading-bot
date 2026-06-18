@@ -47,7 +47,7 @@ def fetch_and_save(
     try:
         import nsefin
 
-        raw = nsefin.get_fii_dii_activity()
+        raw = nsefin.nse.get_fii_dii_activity()
         # nsefin returns a list of dicts; most recent entry is first
         # Each row has keys: date, fii_net_value (crore), dii_net_value (crore)
         if not raw:
