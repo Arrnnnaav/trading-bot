@@ -207,7 +207,7 @@ class KronosDataset(Dataset):
                 ]
             )
         x = torch.tensor(features, dtype=torch.float32)  # [63, 5]
-        return x, int(self.labels[end])
+        return x, int(self.labels[end - 1])
 
 
 def load_india_data(
