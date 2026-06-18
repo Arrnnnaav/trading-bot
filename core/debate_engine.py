@@ -195,7 +195,7 @@ class DebateEngine:
         )
 
     def _build_system_prompt(self) -> str:
-        base = "You are a crypto trading analyst."
+        base = "You are an India index options trading analyst."
         if self.learnings:
             return f"{base}\n\nRecent learnings from signal outcomes:\n{self.learnings}"
         return base
