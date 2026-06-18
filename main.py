@@ -89,6 +89,68 @@ def build_components():
     )
 
 
+def _build_data_scheduler():
+    """Build APScheduler for data ingestion jobs (FII/DII + live news).
+
+    FII/DII:   19:00 IST weekdays  (NSE publishes ~18:30 IST)
+    Live news: every 30min, 09:00–15:30 IST weekdays
+    """
+    from apscheduler.schedulers.background import BackgroundScheduler
+    from apscheduler.triggers.cron import CronTrigger
+
+    scheduler = BackgroundScheduler(timezone="Asia/Kolkata")
+
+    # FII/DII: 19:00 IST, Monday–Friday
+    def _run_fii_dii():
+        from scripts.fetch_fii_dii import fetch_and_save
+
+        result = fetch_and_save(
+            output_dir="data/fii_dii",
+        )
+        if result:
+            _LOG.info("[data-scheduler] FII/DII saved: %s", result)
+        else:
+            _LOG.warning("[data-scheduler] FII/DII fetch returned None")
+
+    scheduler.add_job(
+        _run_fii_dii,
+        trigger=CronTrigger(
+            day_of_week="mon-fri", hour=19, minute=0, timezone="Asia/Kolkata"
+        ),
+        id="fii_dii_daily",
+        name="FII/DII daily fetch",
+        replace_existing=True,
+        misfire_grace_time=600,
+    )
+
+    # Live news: every 30min, 09:00–15:30 IST, Monday–Friday
+    def _run_news_fetch():
+        from scripts.fetch_news_live import fetch_and_ingest
+
+        result = fetch_and_ingest(
+            api_key=config.marketaux_api_key,
+            chroma_path=config.chroma_db_path,
+            output_dir="data/news",
+        )
+        _LOG.info("[data-scheduler] News ingestion: %s", result)
+
+    scheduler.add_job(
+        _run_news_fetch,
+        trigger=CronTrigger(
+            day_of_week="mon-fri",
+            hour="9-15",
+            minute="0,30",
+            timezone="Asia/Kolkata",
+        ),
+        id="news_live_30min",
+        name="Live news fetch (30min)",
+        replace_existing=True,
+        misfire_grace_time=300,
+    )
+
+    return scheduler
+
+
 async def main():
     (
         india_intraday_harness,
@@ -98,6 +160,8 @@ async def main():
         harness_states,
         india_broker,
     ) = build_components()
+
+    data_scheduler = _build_data_scheduler()
 
     print("=" * 50)
     print("Trading Bot v2 — India Index Options")
@@ -116,6 +180,11 @@ async def main():
         india_intraday_harness.start()
     if india_positional_harness:
         india_positional_harness.start()
+
+    data_scheduler.start()
+    _LOG.info(
+        "Data scheduler started: FII/DII@19:00 IST, news@every 30min 09:00-15:30 IST"
+    )
 
     tracker = SignalTracker(aggregator, india_broker)
     monitor = StopMonitor(
@@ -148,6 +217,8 @@ async def main():
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
         server.should_exit = True
+        if data_scheduler.running:
+            data_scheduler.shutdown(wait=False)
         if india_intraday_harness and india_intraday_harness.scheduler.running:
             india_intraday_harness.scheduler.shutdown(wait=False)
         if india_positional_harness and india_positional_harness.scheduler.running:
