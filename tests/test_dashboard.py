@@ -32,7 +32,7 @@ _SIGNAL_STOP_HIT = {
     "ticker": "BANKNIFTY",
     "direction": "SHORT",
     "outcome": "STOP_HIT",
-    "outcome_at": "2026-06-19T11:00:00+00:00",
+    "outcome_at": "2026-06-19T15:00:00+00:00",
     "hypothetical_pnl_inr": -1500.0,
     "hypothetical_pnl_pct": -0.75,
 }

@@ -73,6 +73,7 @@ section h2{font-size:11px;color:#555;text-transform:uppercase;letter-spacing:1px
 </section>
 
 <script>
+const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 const IST = 5.5 * 3600000;
 const fmt = v => v == null ? '—' : (v >= 0 ? '+₹' : '-₹') + Math.abs(v).toLocaleString('en-IN', {maximumFractionDigits:0});
 const fmtT = iso => { if(!iso) return '—'; const d = new Date(new Date(iso).getTime()+IST); return d.toISOString().slice(11,16); };
@@ -102,8 +103,8 @@ async function refresh() {
     if (!pos.length) { grid.innerHTML='<div class="empty">No open positions</div>'; return; }
     grid.innerHTML = pos.map(p=>`
       <div class="pos-card">
-        <div class="pos-head"><span class="pos-ticker">${p.ticker}</span>
-        <span class="dir ${p.direction==='LONG'?'dir-l':'dir-s'}">${p.direction}</span></div>
+        <div class="pos-head"><span class="pos-ticker">${esc(p.ticker)}</span>
+        <span class="dir ${esc(p.direction)==='LONG'?'dir-l':'dir-s'}">${esc(p.direction)}</span></div>
         <div class="pos-line">Entry ₹${(p.entry_price||0).toLocaleString('en-IN')}</div>
         <div class="pos-line">Target ₹${(p.target_price||0).toLocaleString('en-IN')} · Stop ₹${(p.stop_price||0).toLocaleString('en-IN')}</div>
         <div class="pos-line">Opened ${fmtT(p.opened_at)} IST &nbsp;·&nbsp; <span style="color:#00d4aa">OPEN</span></div>
@@ -117,7 +118,7 @@ function addRow(sig) {
   const dc = dir==='LONG'?'fl':dir==='SHORT'?'fs':'fh';
   const conf = sig.confidence != null ? (sig.confidence*100).toFixed(0)+'%' : '—';
   const st = dir!=='HOLD'?'<span class="fex">✅ AUTO-EXECUTED</span>':'<span class="fno">—</span>';
-  rows.unshift(`<div class="feed-row"><span class="ft">${fmtT(sig.generated_at||new Date().toISOString())}</span><span>${sig.ticker||'—'}</span><span class="${dc}">${dir}</span><span style="color:#666">${conf}</span>${st}</div>`);
+  rows.unshift(`<div class="feed-row"><span class="ft">${fmtT(sig.generated_at||new Date().toISOString())}</span><span>${esc(sig.ticker)||'—'}</span><span class="${dc}">${esc(dir)}</span><span style="color:#666">${esc(conf)}</span>${st}</div>`);
   if(rows.length>50) rows.pop();
   document.getElementById('feed-body').innerHTML = rows.join('');
 }

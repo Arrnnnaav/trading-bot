@@ -124,6 +124,7 @@ async def get_equity_curve():
         and s.get("hypothetical_pnl_inr") is not None
         and s.get("outcome") not in ("PENDING", None)
     ]
+    resolved.sort(key=lambda s: s.get("outcome_at") or "")
     cumulative = 0.0
     points = []
     for s in resolved:
