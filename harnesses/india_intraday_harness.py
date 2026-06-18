@@ -6,7 +6,7 @@ import pytz
 
 from agents.fundamentals import FundamentalsAgent
 from agents.fii_dii import FIIDIIAgent
-from agents.options_oi import OptionsOIAgent
+from agents.options_chain import OptionsChainAgent
 from brokers.upstox import UpstoxBroker
 from brokers.paper_broker import PaperBroker
 from config import config
@@ -44,7 +44,7 @@ class IndiaIntradayHarness(BaseHarness):
         agents = [
             FundamentalsAgent(),
             FIIDIIAgent(),
-            OptionsOIAgent(broker),
+            OptionsChainAgent(broker),
         ]
         super().__init__(
             state_path="data/india_intraday_progress.json",
