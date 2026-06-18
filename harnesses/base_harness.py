@@ -1,8 +1,11 @@
 import json
+import logging
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+from pydantic import ValidationError
 from core.llm_client import ClaudeCodeClient
+from core.json_store import read_json, write_json_atomic
 from core.models import HarnessState, Direction
 from core.debate_engine import DebateEngine
 from core.risk_manager import RiskManager
@@ -10,6 +13,8 @@ from core.signal_aggregator import SignalAggregator
 from core.agent_tracker import AgentPerformanceTracker
 from core.pattern_reputation import PatternReputationTracker
 from config import config
+
+_LOG = logging.getLogger(__name__)
 
 
 class BaseHarness:
@@ -39,14 +44,15 @@ class BaseHarness:
 
     def _load_state(self) -> HarnessState:
         try:
-            with open(self.state_path) as f:
-                return HarnessState(**json.load(f))
-        except (FileNotFoundError, Exception):
+            return HarnessState(**read_json(self.state_path, {}))
+        except FileNotFoundError:
+            return HarnessState()
+        except (json.JSONDecodeError, ValidationError, TypeError) as exc:
+            _LOG.warning("Invalid harness state at %s: %s", self.state_path, exc)
             return HarnessState()
 
     def _save_state(self):
-        with open(self.state_path, "w") as f:
-            f.write(self.state.model_dump_json(indent=2))
+        write_json_atomic(self.state_path, self.state.model_dump(mode="json"))
 
     def _make_signal_id(self) -> str:
         ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
@@ -57,10 +63,12 @@ class BaseHarness:
         self._pattern_reputation.refresh()
         agent_weights = self._agent_tracker.get_weights()
 
-        votes = [
-            agent.analyze(ticker, klines, self.MARKET, **agent_kwargs)
-            for agent in self.agents
-        ]
+        votes = []
+        for agent in self.agents:
+            try:
+                votes.append(agent.analyze(ticker, klines, self.MARKET, **agent_kwargs))
+            except Exception as exc:
+                _LOG.warning("%s failed for %s: %s", agent.name, ticker, exc)
 
         consensus = await self.debate_engine.reach_consensus(
             votes, ticker=ticker, agent_weights=agent_weights
@@ -78,9 +86,6 @@ class BaseHarness:
             return None
 
         signal_id = self._make_signal_id()
-        reasoning = await self.debate_engine.generate_reasoning(
-            votes, direction, ticker
-        )
         signal = self.risk_manager.build_signal(
             signal_id,
             ticker,
@@ -131,10 +136,14 @@ class BaseHarness:
             "(2) which failed, (3) one rule to apply next session."
         )
 
-        learnings = await self._llm_client.call(
-            prompt=summary_prompt,
-            model="claude-haiku-4-5-20251001",
-        )
+        try:
+            learnings = await self._llm_client.call(
+                prompt=summary_prompt,
+                model="claude-haiku-4-5-20251001",
+            )
+        except Exception as exc:
+            _LOG.warning("LLM learnings call failed: %s", exc)
+            return
         if not learnings:
             return
 
@@ -144,6 +153,8 @@ class BaseHarness:
 
         log_path = Path("data") / f"{self.MARKET.value}_learnings.md"
         log_path.parent.mkdir(exist_ok=True)
-        with open(log_path, "a") as f:
-            ts = datetime.now(timezone.utc).isoformat()
-            f.write(f"\n## {ts}\n{learnings}\n")
+        ts = datetime.now(timezone.utc).isoformat()
+        existing = log_path.read_text(encoding="utf-8") if log_path.exists() else ""
+        tmp = log_path.with_suffix(".tmp")
+        tmp.write_text(existing + f"\n## {ts}\n{learnings}\n", encoding="utf-8")
+        tmp.replace(log_path)

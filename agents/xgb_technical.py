@@ -11,15 +11,16 @@ Confidence = max class probability, only emits vote if >= 0.50.
 
 import numpy as np
 import pandas as pd
+import json
 from pathlib import Path
 
 import lightgbm as lgb
-import pandas_ta as ta
 
 from agents.base import BaseAgent
 from core.models import AgentVote, Direction, Market
 
 MODEL_PATH = Path("models/xgb_technical/lgb_model.txt")
+METADATA_PATH = Path("models/xgb_technical/metadata.json")
 CONFIDENCE_THRESHOLD = 0.50
 LABEL_NAMES = ["LONG", "SHORT", "HOLD"]
 DIRECTION_MAP = {
@@ -41,61 +42,28 @@ def _compute_features(df: pd.DataFrame) -> dict | None:
     if len(df) < 55:
         return None
 
-    o, h, l, c, v = df["open"], df["high"], df["low"], df["close"], df["volume"]
+    # Keep runtime features aligned with the training pipeline.
+    try:
+        from training.xgb_features import _compute_features as _compute_feature_frame
+    except ImportError:
+        return None
+
+    feature_frame = _compute_feature_frame(df.copy())
+    if feature_frame.empty:
+        return None
+    last_row = feature_frame.iloc[-1]
+
+    # Symbol one-hots are added by load_features() at training time, not by the
+    # shared _compute_features — rebuild them here from the symbol column.
+    raw = df.get("symbol")
+    symbol = str(raw.iloc[-1]) if raw is not None else ""
 
     feats = {}
-
-    feats["rsi_14"] = ta.rsi(c, length=14).iloc[-1]
-
-    macd = ta.macd(c, fast=12, slow=26, signal=9)
-    last_c = c.iloc[-1]
-    feats["macd_line"] = macd["MACD_12_26_9"].iloc[-1] / last_c
-    feats["macd_signal"] = macd["MACDs_12_26_9"].iloc[-1] / last_c
-    feats["macd_hist"] = macd["MACDh_12_26_9"].iloc[-1] / last_c
-
-    feats["roc_10"] = ta.roc(c, length=10).iloc[-1]
-    feats["mom_10"] = ta.mom(c, length=10).iloc[-1] / last_c
-
-    stoch = ta.stoch(h, l, c, k=14, d=3)
-    feats["stoch_k"] = stoch["STOCHk_14_3_3"].iloc[-1]
-    feats["stoch_d"] = stoch["STOCHd_14_3_3"].iloc[-1]
-
-    feats["willr_14"] = ta.willr(h, l, c, length=14).iloc[-1]
-    feats["cci_20"] = ta.cci(h, l, c, length=20).iloc[-1]
-
-    adx = ta.adx(h, l, c, length=14)
-    feats["adx_14"] = adx["ADX_14"].iloc[-1]
-    feats["dmp_14"] = adx["DMP_14"].iloc[-1]
-    feats["dmn_14"] = adx["DMN_14"].iloc[-1]
-
-    feats["ema9_ratio"] = ta.ema(c, length=9).iloc[-1] / last_c - 1
-    feats["ema21_ratio"] = ta.ema(c, length=21).iloc[-1] / last_c - 1
-    feats["ema50_ratio"] = ta.ema(c, length=50).iloc[-1] / last_c - 1
-    feats["sma20_ratio"] = ta.sma(c, length=20).iloc[-1] / last_c - 1
-    feats["sma50_ratio"] = ta.sma(c, length=50).iloc[-1] / last_c - 1
-
-    atr = ta.atr(h, l, c, length=14)
-    feats["atr_ratio"] = atr.iloc[-1] / last_c
-
-    bb = ta.bbands(c, length=20, std=2)
-    feats["bb_pct"] = bb["BBP_20_2.0_2.0"].iloc[-1]
-    feats["bb_bw"] = bb["BBB_20_2.0_2.0"].iloc[-1]
-
-    vol_sma = ta.sma(v, length=20)
-    feats["vol_ratio"] = v.iloc[-1] / (vol_sma.iloc[-1] + 1e-8)
-    obv = ta.obv(c, v)
-    obv_mean = obv.rolling(20).mean().iloc[-1]
-    obv_std = obv.rolling(20).std().iloc[-1] + 1e-8
-    feats["obv_norm"] = (obv.iloc[-1] - obv_mean) / obv_std
-
-    hl_range = max(h.iloc[-1] - l.iloc[-1], 1e-8)
-    body = abs(c.iloc[-1] - o.iloc[-1])
-    high_body = max(c.iloc[-1], o.iloc[-1])
-    low_body = min(c.iloc[-1], o.iloc[-1])
-    feats["body_ratio"] = body / hl_range
-    feats["upper_wick"] = (h.iloc[-1] - high_body) / hl_range
-    feats["lower_wick"] = (low_body - l.iloc[-1]) / hl_range
-    feats["hl_ratio"] = hl_range / last_c
+    for f in FEATURE_ORDER:
+        if f.startswith("symbol_"):
+            feats[f] = 1.0 if f == f"symbol_{symbol}" else 0.0
+        else:
+            feats[f] = float(last_row[f])
 
     if any(np.isnan(v) for v in feats.values()):
         return None
@@ -130,6 +98,26 @@ FEATURE_ORDER = [
     "upper_wick",
     "lower_wick",
     "hl_ratio",
+    "ret_1",
+    "ret_4",
+    "ret_16",
+    "ret_48",
+    "realized_vol_4",
+    "realized_vol_16",
+    "realized_vol_48",
+    "range_atr_ratio",
+    "trend_strength",
+    "ema9_ema21_spread",
+    "ema21_ema50_spread",
+    "hour_sin",
+    "hour_cos",
+    "dow_sin",
+    "dow_cos",
+    "symbol_BTCUSDT",
+    "symbol_ETHUSDT",
+    "symbol_SOLUSDT",
+    "symbol_BNBUSDT",
+    "symbol_XRPUSDT",
 ]
 
 
@@ -143,11 +131,21 @@ class XGBTechnicalAgent(BaseAgent):
                 f"XGB model not found at {MODEL_PATH}. Run: python -m training.train_xgb"
             )
         self._model = lgb.Booster(model_file=str(MODEL_PATH))
+        self._thresholds = self._load_thresholds()
+
+    @staticmethod
+    def _load_thresholds() -> dict[str, float]:
+        try:
+            metadata = json.loads(METADATA_PATH.read_text())
+            return metadata.get("class_thresholds", {})
+        except Exception:
+            return {}
 
     def analyze(
         self, ticker: str, klines: list[dict], market: Market, **kwargs
     ) -> AgentVote:
         df = _klines_to_df(klines)
+        df["symbol"] = ticker.replace("/", "")
         feats = _compute_features(df)
 
         if feats is None:
@@ -165,13 +163,14 @@ class XGBTechnicalAgent(BaseAgent):
         confidence = float(probs[label_idx])
         label = LABEL_NAMES[label_idx]
         direction = DIRECTION_MAP[label]
+        threshold = getattr(self, "_thresholds", {}).get(label, CONFIDENCE_THRESHOLD)
 
-        if direction == Direction.HOLD or confidence < CONFIDENCE_THRESHOLD:
+        if direction == Direction.HOLD or confidence < threshold:
             return AgentVote(
                 agent_name=self.name,
                 direction=Direction.HOLD,
                 confidence=0.0,
-                reasoning=f"XGB: {label} @ {confidence:.2f} — below threshold",
+                reasoning=f"XGB: {label} @ {confidence:.2f} — below threshold {threshold:.2f}",
             )
 
         reasoning = (

@@ -32,8 +32,9 @@ def test_dataset_item_shapes():
 
     df = make_labeled_df(200)
     ds = CryptoDataset(df, window=96)
-    close_window, label = ds[0]
+    close_window, stat_features, label = ds[0]
     assert close_window.shape == torch.Size([96])
+    assert stat_features.shape == torch.Size([7])
     assert isinstance(label, int)
     assert label in (0, 1, 2)
 
@@ -43,7 +44,7 @@ def test_dataset_close_is_normalized():
 
     df = make_labeled_df(200)
     ds = CryptoDataset(df, window=96)
-    close_window, _ = ds[0]
+    close_window, _, _ = ds[0]
     # z-score: mean ~0, std ~1
     assert abs(close_window.mean().item()) < 0.5
     assert 0.1 < close_window.std().item() < 10.0

@@ -10,7 +10,7 @@ from typing import Dict
 from training.model import ChronosClassifier
 from training.dataset import load_all_tickers, split_datasets, compute_class_weights
 
-MODEL_DIR = Path("models/chronos_crypto")
+MODEL_DIR = Path("models/kronos_india")
 CHECKPOINT = "amazon/chronos-t5-small"
 
 # Phase 1: freeze encoder, train head only
@@ -22,6 +22,14 @@ PHASE1_BATCH = 64
 PHASE2_EPOCHS = 3
 PHASE2_LR = 1e-5
 PHASE2_BATCH = 32
+
+
+def _unpack_batch(batch):
+    if len(batch) == 3:
+        close_batch, _stat_batch, label_batch = batch
+        return close_batch, label_batch
+    close_batch, label_batch = batch
+    return close_batch, label_batch
 
 
 def train_epoch(
@@ -36,7 +44,8 @@ def train_epoch(
         weight=class_weights.to(device) if class_weights is not None else None
     )
     total_loss = 0.0
-    for close_batch, label_batch in tqdm(loader, leave=False, desc="train"):
+    for batch in tqdm(loader, leave=False, desc="train"):
+        close_batch, label_batch = _unpack_batch(batch)
         close_batch = close_batch.to(device)
         label_batch = label_batch.to(device)
         optimizer.zero_grad()
@@ -59,7 +68,8 @@ def eval_epoch(
     total_loss = 0.0
     all_preds, all_labels = [], []
     with torch.no_grad():
-        for close_batch, label_batch in tqdm(loader, leave=False, desc="eval"):
+        for batch in tqdm(loader, leave=False, desc="eval"):
+            close_batch, label_batch = _unpack_batch(batch)
             close_batch = close_batch.to(device)
             label_batch = label_batch.to(device)
             logits = model(close_batch)

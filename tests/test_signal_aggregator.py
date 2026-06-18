@@ -4,9 +4,7 @@ from core.signal_aggregator import SignalAggregator
 from core.models import Signal, Market, Direction
 
 
-def make_signal(
-    id="s1", market=Market.CRYPTO, ticker="BTC/USDT", direction=Direction.LONG
-):
+def make_signal(id="s1", market=Market.INDIA, ticker="NIFTY", direction=Direction.LONG):
     return Signal(
         id=id,
         market=market,
@@ -45,12 +43,12 @@ def test_log_signal_appends(tmp_path):
 def test_dedup_same_ticker_returns_true(tmp_path):
     log_path = str(tmp_path / "signal_log.json")
     agg = SignalAggregator(signal_log_path=log_path)
-    agg.log_signal(make_signal("s1"))
-    assert agg.is_duplicate(make_signal("s2", ticker="BTC/USDT")) == True
+    agg.log_signal(make_signal("s1", ticker="NIFTY"))
+    assert agg.is_duplicate(make_signal("s2", ticker="NIFTY")) == True
 
 
 def test_dedup_different_ticker_returns_false(tmp_path):
     log_path = str(tmp_path / "signal_log.json")
     agg = SignalAggregator(signal_log_path=log_path)
-    agg.log_signal(make_signal("s1", ticker="BTC/USDT"))
-    assert agg.is_duplicate(make_signal("s2", ticker="ETH/USDT")) == False
+    agg.log_signal(make_signal("s1", ticker="NIFTY"))
+    assert agg.is_duplicate(make_signal("s2", ticker="BANKNIFTY")) == False

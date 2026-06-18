@@ -1,7 +1,9 @@
 import asyncio
 import json
+import logging
 import os
 from datetime import datetime, timezone, timedelta
+from pathlib import Path
 
 from config import config
 from core.models import Market, SignalOutcome
@@ -10,18 +12,14 @@ from core.signal_aggregator import SignalAggregator
 CHRONOS_OUTCOMES_PATH = os.environ.get(
     "CHRONOS_OUTCOMES_PATH", "data/chronos_outcomes.jsonl"
 )
+_LOG = logging.getLogger(__name__)
 
 
 class SignalTracker:
-    def __init__(self, aggregator: SignalAggregator, crypto_broker, india_broker):
+    def __init__(self, aggregator: SignalAggregator, india_broker):
         self.aggregator = aggregator
         self.brokers = {
-            k: v
-            for k, v in {
-                Market.CRYPTO: crypto_broker,
-                Market.INDIA: india_broker,
-            }.items()
-            if v is not None
+            Market.INDIA: india_broker,
         }
 
     def _resolve_outcome(self, entry: dict, current_price: float) -> SignalOutcome:
@@ -47,10 +45,7 @@ class SignalTracker:
             if generated.tzinfo is None:
                 generated = generated.replace(tzinfo=timezone.utc)
             market = entry["market"]
-            if market == "crypto":
-                expiry = generated + timedelta(hours=config.crypto_signal_expiry_hours)
-            else:
-                expiry = generated + timedelta(days=config.india_signal_expiry_days)
+            expiry = generated + timedelta(days=config.india_signal_expiry_days)
             return datetime.now(timezone.utc) > expiry
         except Exception:
             return False
@@ -88,6 +83,7 @@ class SignalTracker:
             "confidence": confidence,
             "actual": outcome.value,
         }
+        Path(CHRONOS_OUTCOMES_PATH).parent.mkdir(parents=True, exist_ok=True)
         with open(CHRONOS_OUTCOMES_PATH, "a") as f:
             f.write(json.dumps(record) + "\n")
 
@@ -116,13 +112,20 @@ class SignalTracker:
                     self.aggregator.update_signal_outcome(
                         entry["id"], outcome.value, outcome_price, pnl_pct, pnl_inr
                     )
-                    # Persist for Chronos retraining
-                    if entry.get("market") == "crypto":
-                        self._write_chronos_outcome(entry, outcome)
-            except Exception:
+                    # Persist for model retraining
+                    self._write_chronos_outcome(entry, outcome)
+            except Exception as exc:
+                _LOG.warning(
+                    "Signal outcome tracking failed for %s: %s",
+                    entry.get("id", "<unknown>"),
+                    exc,
+                )
                 continue
 
     async def run_forever(self, interval_seconds: int = 900):
         while True:
-            await self.run_once()
+            try:
+                await self.run_once()
+            except Exception:
+                _LOG.exception("Signal tracker iteration failed")
             await asyncio.sleep(interval_seconds)

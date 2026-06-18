@@ -71,6 +71,14 @@ class DebateEngine:
                 "transcript": self._build_transcript(votes),
             }
 
+        transcript = self._build_transcript(votes)
+        if not config.enable_llm_adjudication:
+            return {
+                "direction": direction,
+                "confidence": round(confidence, 3),
+                "transcript": transcript,
+            }
+
         return await self._adversarial_debate(
             votes, ticker, direction, round(confidence, 3)
         )

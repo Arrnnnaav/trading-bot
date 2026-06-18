@@ -17,7 +17,7 @@ from training.model import ChronosClassifier
 from training.dataset import LABEL_MAP, WINDOW
 
 OUTCOMES_PATH = "data/chronos_outcomes.jsonl"
-MODEL_PATH = "models/chronos_crypto/best.pt"
+MODEL_PATH = "models/kronos_india/best.pt"
 MIN_NEW_SAMPLES = 500
 EPOCHS = 2
 LR = 5e-6

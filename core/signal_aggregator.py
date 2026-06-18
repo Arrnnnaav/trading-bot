@@ -1,7 +1,10 @@
-import json
-import os
+import logging
+from pathlib import Path
 from datetime import datetime, timezone, timedelta
 from core.models import Signal
+from core.json_store import read_json, write_json_atomic
+
+_LOG = logging.getLogger(__name__)
 
 
 class SignalAggregator:
@@ -12,18 +15,17 @@ class SignalAggregator:
         self._ensure_log_exists()
 
     def _ensure_log_exists(self):
-        os.makedirs(os.path.dirname(self.signal_log_path), exist_ok=True)
-        if not os.path.exists(self.signal_log_path):
-            with open(self.signal_log_path, "w") as f:
-                json.dump([], f)
+        path = Path(self.signal_log_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if not path.exists():
+            write_json_atomic(path, [])
 
     def _load_log(self) -> list[dict]:
-        with open(self.signal_log_path) as f:
-            return json.load(f)
+        data = read_json(self.signal_log_path, [])
+        return data if isinstance(data, list) else []
 
     def _save_log(self, data: list[dict]):
-        with open(self.signal_log_path, "w") as f:
-            json.dump(data, f, indent=2)
+        write_json_atomic(self.signal_log_path, data)
 
     def log_signal(self, signal: Signal):
         data = self._load_log()
@@ -43,7 +45,8 @@ class SignalAggregator:
                 # Check if within window and outcome is PENDING
                 if entry_time > cutoff and entry["outcome"] == "PENDING":
                     return True
-            except Exception:
+            except Exception as exc:
+                _LOG.debug("Skipping malformed signal entry for dedup check: %s", exc)
                 continue
         return False
 
@@ -65,6 +68,18 @@ class SignalAggregator:
                 entry["hypothetical_pnl_inr"] = round(hypothetical_pnl_inr, 2)
                 break
         self._save_log(data)
+
+    def mark_signal_executed(self, signal_id: str) -> bool:
+        data = self._load_log()
+        updated = False
+        for entry in data:
+            if entry["id"] == signal_id:
+                entry["executed"] = True
+                updated = True
+                break
+        if updated:
+            self._save_log(data)
+        return updated
 
     def get_all_signals(self) -> list[dict]:
         return self._load_log()

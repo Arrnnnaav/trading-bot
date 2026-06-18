@@ -9,7 +9,7 @@ def make_pending_entry(
 ):
     return {
         "id": "sig_001",
-        "market": "crypto",
+        "market": "india",
         "ticker": "BTC/USDT",
         "direction": direction,
         "entry_price": entry,
@@ -28,27 +28,21 @@ def make_pending_entry(
 
 
 def test_target_hit_long():
-    tracker = SignalTracker(
-        aggregator=MagicMock(), crypto_broker=MagicMock(), india_broker=MagicMock()
-    )
+    tracker = SignalTracker(aggregator=MagicMock(), india_broker=MagicMock())
     entry = make_pending_entry("LONG", 62400, 65100, 61000, 2000)
     outcome = tracker._resolve_outcome(entry, current_price=65200.0)
     assert outcome == SignalOutcome.TARGET_HIT
 
 
 def test_stop_hit_long():
-    tracker = SignalTracker(
-        aggregator=MagicMock(), crypto_broker=MagicMock(), india_broker=MagicMock()
-    )
+    tracker = SignalTracker(aggregator=MagicMock(), india_broker=MagicMock())
     entry = make_pending_entry("LONG", 62400, 65100, 61000, 2000)
     outcome = tracker._resolve_outcome(entry, current_price=60900.0)
     assert outcome == SignalOutcome.STOP_HIT
 
 
 def test_hypothetical_pnl_target_hit():
-    tracker = SignalTracker(
-        aggregator=MagicMock(), crypto_broker=MagicMock(), india_broker=MagicMock()
-    )
+    tracker = SignalTracker(aggregator=MagicMock(), india_broker=MagicMock())
     pnl_pct, pnl_inr = tracker._calc_pnl(
         direction="LONG", entry_price=62400, outcome_price=65100, position_size_inr=2000
     )
@@ -57,9 +51,7 @@ def test_hypothetical_pnl_target_hit():
 
 
 def test_hypothetical_pnl_stop_hit():
-    tracker = SignalTracker(
-        aggregator=MagicMock(), crypto_broker=MagicMock(), india_broker=MagicMock()
-    )
+    tracker = SignalTracker(aggregator=MagicMock(), india_broker=MagicMock())
     pnl_pct, pnl_inr = tracker._calc_pnl(
         direction="LONG", entry_price=62400, outcome_price=61000, position_size_inr=2000
     )
@@ -80,12 +72,12 @@ def test_chronos_outcome_written_to_jsonl(tmp_path, monkeypatch):
     importlib.reload(st_mod)
 
     agg = SignalAggregator(signal_log_path=str(tmp_path / "signal_log.json"))
-    tracker = st_mod.SignalTracker(agg, MagicMock(), MagicMock())
+    tracker = st_mod.SignalTracker(agg, MagicMock())
 
     entry = {
         "id": "sig_test_001",
         "ticker": "BTC/USDT",
-        "market": "crypto",
+        "market": "india",
         "direction": "LONG",
         "entry_price": 62000.0,
         "target_price": 63200.0,

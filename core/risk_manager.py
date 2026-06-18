@@ -24,13 +24,28 @@ class RiskManager:
             trs.append(tr)
         return float(np.mean(trs[-period:]))
 
-    def size_position(self, state: HarnessState) -> float:
-        return round(state.portfolio_value_inr * config.max_portfolio_pct_per_trade, 2)
+    def size_position(
+        self,
+        state: HarnessState,
+        entry: float | None = None,
+        stop: float | None = None,
+    ) -> float:
+        max_notional = state.portfolio_value_inr * config.max_portfolio_pct_per_trade
+        if entry is None or stop is None:
+            return round(max_notional, 2)
+
+        stop_distance_pct = abs(entry - stop) / entry if entry > 0 else 0.0
+        if stop_distance_pct <= 0:
+            return 0.0
+
+        risk_budget = state.portfolio_value_inr * config.max_risk_pct_per_trade
+        risk_sized_notional = risk_budget / stop_distance_pct
+        return round(min(max_notional, risk_sized_notional), 2)
 
     def calc_levels(
         self, entry: float, direction: Direction, atr: float
     ) -> tuple[float, float]:
-        atr_mult = 2.0 if self.market == Market.CRYPTO else 1.5
+        atr_mult = 1.5
         if direction == Direction.LONG:
             stop = round(entry - atr_mult * atr, 2)
             target = round(entry + config.min_rr_ratio * atr_mult * atr, 2)
@@ -53,6 +68,21 @@ class RiskManager:
                 False,
                 f"Max {config.max_open_positions_per_market} open positions reached",
             )
+
+        if state.portfolio_value_inr > 0:
+            daily_loss_pct = (
+                abs(min(state.daily_realized_pnl_inr, 0.0)) / state.portfolio_value_inr
+            )
+            weekly_loss_pct = (
+                abs(min(state.weekly_realized_pnl_inr, 0.0)) / state.portfolio_value_inr
+            )
+            if daily_loss_pct >= config.max_daily_loss_pct:
+                return False, f"Daily loss limit reached ({daily_loss_pct:.2%})"
+            if weekly_loss_pct >= config.max_weekly_loss_pct:
+                return False, f"Weekly loss limit reached ({weekly_loss_pct:.2%})"
+
+        if state.consecutive_losses >= config.max_consecutive_losses:
+            return False, f"Consecutive loss limit reached ({state.consecutive_losses})"
 
         existing = [p for p in state.open_positions if p.ticker == ticker]
         if existing:
@@ -92,6 +122,9 @@ class RiskManager:
         if rr < config.min_rr_ratio:
             return False, f"R:R {rr:.2f} below minimum {config.min_rr_ratio}"
 
+        if self.size_position(state, entry, stop) <= 0:
+            return False, "Position size is zero"
+
         return True, "approved"
 
     def build_signal(
@@ -110,7 +143,7 @@ class RiskManager:
         entry = klines[-1]["close"]
         atr = self._calc_atr(klines)
         target, stop = self.calc_levels(entry, direction, atr)
-        size = self.size_position(state)
+        size = self.size_position(state, entry, stop)
 
         return Signal(
             id=signal_id,

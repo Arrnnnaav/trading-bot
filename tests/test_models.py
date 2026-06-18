@@ -11,8 +11,8 @@ from core.models import (
 def test_signal_creation():
     s = Signal(
         id="sig_001",
-        market=Market.CRYPTO,
-        ticker="BTC/USDT",
+        market=Market.INDIA,
+        ticker="NIFTY",
         direction=Direction.LONG,
         entry_price=62400.0,
         target_price=65100.0,
@@ -29,8 +29,8 @@ def test_signal_creation():
 def test_signal_rr_ratio():
     s = Signal(
         id="sig_002",
-        market=Market.CRYPTO,
-        ticker="ETH/USDT",
+        market=Market.INDIA,
+        ticker="BANKNIFTY",
         direction=Direction.LONG,
         entry_price=3000.0,
         target_price=3300.0,

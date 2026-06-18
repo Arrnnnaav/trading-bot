@@ -1,3 +1,5 @@
+import logging
+
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 import pytz
@@ -10,6 +12,7 @@ from brokers.upstox import UpstoxBroker
 from brokers.paper_broker import PaperBroker
 from config import config
 
+_LOG = logging.getLogger(__name__)
 IST = pytz.timezone("Asia/Kolkata")
 
 INDIA_TICKERS = [
@@ -19,9 +22,6 @@ INDIA_TICKERS = [
     "NSE_EQ|INE009A01021",  # Infosys
     "NSE_EQ|INE030A01027",  # Reliance
 ]
-
-NEXT_WEEKLY_EXPIRY = "2026-05-29"  # update weekly or fetch dynamically
-
 
 class IndiaHarness(BaseHarness):
     MARKET = Market.INDIA
@@ -48,14 +48,14 @@ class IndiaHarness(BaseHarness):
         self.scheduler = AsyncIOScheduler(timezone=IST)
 
     async def _run_all_tickers(self):
+        expiry = self.broker.resolve_options_expiry()
         for token in INDIA_TICKERS:
             try:
                 klines = self.broker.get_ohlcv(token, interval="1d", limit=60)
                 ticker_display = token.split("|")[-1]
-                await self.run_session(
-                    ticker_display, klines, expiry=NEXT_WEEKLY_EXPIRY
-                )
-            except Exception:
+                await self.run_session(ticker_display, klines, expiry=expiry)
+            except Exception as exc:
+                _LOG.warning("India harness failed for %s: %s", token, exc)
                 continue
         await self.update_learnings()
 

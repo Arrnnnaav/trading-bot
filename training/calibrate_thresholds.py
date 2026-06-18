@@ -38,7 +38,7 @@ def calibrate(
     min_samples: int = MIN_SAMPLES,
 ) -> dict:
     """
-    Read resolved crypto signals from signal_log.json.
+    Read resolved India signals from signal_log.json.
     Compute threshold values that maximise TARGET_HIT precision.
     Falls back to defaults if < min_samples resolved signals.
     """
@@ -48,26 +48,26 @@ def calibrate(
     except (FileNotFoundError, json.JSONDecodeError):
         signals = []
 
-    crypto_resolved = [
+    resolved = [
         s
         for s in signals
-        if s.get("market") == "crypto"
+        if s.get("market") == "india"
         and s.get("outcome") in ("TARGET_HIT", "STOP_HIT")
         and s.get("debate_transcript")
     ]
 
     result = dict(DEFAULTS)
     result["calibrated"] = False
-    result["sample_size"] = len(crypto_resolved)
+    result["sample_size"] = len(resolved)
 
-    if len(crypto_resolved) < min_samples:
+    if len(resolved) < min_samples:
         result["updated_at"] = datetime.now(timezone.utc).isoformat()
         _save(result, out_path)
         return result
 
     funding_pairs = []
     sentiment_pairs = []
-    for s in crypto_resolved:
+    for s in resolved:
         won = s["outcome"] == "TARGET_HIT"
         transcript = s.get("debate_transcript", "")
         funding = _extract_funding_from_transcript(transcript)

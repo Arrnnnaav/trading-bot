@@ -5,7 +5,6 @@ from enum import Enum
 
 
 class Market(str, Enum):
-    CRYPTO = "crypto"
     INDIA = "india"
 
 
@@ -38,12 +37,14 @@ class Position(BaseModel):
     stop_price: float = Field(gt=0.0)
     target_price: float = Field(gt=0.0)
     size_inr: float = Field(gt=0.0)
+    quantity: Optional[float] = None
     opened_at: str
     broker_order_id: str
     instrument_token: Optional[str] = None
     option_type: Optional[str] = None  # "CE" or "PE"
     strike: Optional[float] = None
     expiry: Optional[str] = None
+    expires_at: Optional[str] = None
 
 
 class Signal(BaseModel):
@@ -79,6 +80,9 @@ class Signal(BaseModel):
 class HarnessState(BaseModel):
     session_count: int = 0
     portfolio_value_inr: float = 100000.0
+    daily_realized_pnl_inr: float = 0.0
+    weekly_realized_pnl_inr: float = 0.0
+    consecutive_losses: int = 0
     open_positions: List[Position] = Field(default_factory=list)
     signal_history: List[str] = Field(default_factory=list)
     agent_learnings: str = ""

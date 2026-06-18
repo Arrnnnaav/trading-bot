@@ -242,16 +242,20 @@ class TestXGBTechnicalAgent:
         mock_model = MagicMock(spec=lgb.Booster)
         agent._model = mock_model
 
-        vote = agent.analyze("BTC/USDT", make_klines(30), Market.CRYPTO)
+        vote = agent.analyze("NIFTY", make_klines(30), Market.INDIA)
         assert vote.direction == Direction.HOLD
         assert vote.confidence == 0.0
         assert "insufficient" in vote.reasoning.lower()
         mock_model.predict.assert_not_called()
 
-    def test_returns_hold_below_confidence_threshold(self, tmp_path):
+    def test_returns_hold_below_confidence_threshold(self, tmp_path, monkeypatch):
         import numpy as np
         import lightgbm as lgb
-        from agents.xgb_technical import XGBTechnicalAgent
+        import agents.xgb_technical as xgb_mod
+        from agents.xgb_technical import XGBTechnicalAgent, FEATURE_ORDER
+
+        dummy_feats = {f: 0.0 for f in FEATURE_ORDER}
+        monkeypatch.setattr(xgb_mod, "_compute_features", lambda df: dummy_feats)
 
         agent = XGBTechnicalAgent.__new__(XGBTechnicalAgent)
         mock_model = MagicMock(spec=lgb.Booster)
@@ -259,14 +263,18 @@ class TestXGBTechnicalAgent:
         mock_model.predict.return_value = np.array([[0.45, 0.30, 0.25]])
         agent._model = mock_model
 
-        vote = agent.analyze("BTC/USDT", make_klines(100), Market.CRYPTO)
+        vote = agent.analyze("NIFTY", make_klines(100), Market.INDIA)
         assert vote.direction == Direction.HOLD
         assert vote.confidence == 0.0
 
-    def test_returns_long_vote_above_threshold(self, tmp_path):
+    def test_returns_long_vote_above_threshold(self, tmp_path, monkeypatch):
         import numpy as np
         import lightgbm as lgb
-        from agents.xgb_technical import XGBTechnicalAgent
+        import agents.xgb_technical as xgb_mod
+        from agents.xgb_technical import XGBTechnicalAgent, FEATURE_ORDER
+
+        dummy_feats = {f: 0.0 for f in FEATURE_ORDER}
+        monkeypatch.setattr(xgb_mod, "_compute_features", lambda df: dummy_feats)
 
         agent = XGBTechnicalAgent.__new__(XGBTechnicalAgent)
         mock_model = MagicMock(spec=lgb.Booster)
@@ -274,20 +282,24 @@ class TestXGBTechnicalAgent:
         mock_model.predict.return_value = np.array([[0.72, 0.15, 0.13]])
         agent._model = mock_model
 
-        vote = agent.analyze("BTC/USDT", make_klines(100), Market.CRYPTO)
+        vote = agent.analyze("NIFTY", make_klines(100), Market.INDIA)
         assert vote.direction == Direction.LONG
         assert vote.confidence == pytest.approx(0.72, abs=0.01)
         assert vote.agent_name == "XGBTechnical"
 
-    def test_caps_confidence_at_0_90(self, tmp_path):
+    def test_caps_confidence_at_0_90(self, tmp_path, monkeypatch):
         import numpy as np
         import lightgbm as lgb
-        from agents.xgb_technical import XGBTechnicalAgent
+        import agents.xgb_technical as xgb_mod
+        from agents.xgb_technical import XGBTechnicalAgent, FEATURE_ORDER
+
+        dummy_feats = {f: 0.0 for f in FEATURE_ORDER}
+        monkeypatch.setattr(xgb_mod, "_compute_features", lambda df: dummy_feats)
 
         agent = XGBTechnicalAgent.__new__(XGBTechnicalAgent)
         mock_model = MagicMock(spec=lgb.Booster)
         mock_model.predict.return_value = np.array([[0.99, 0.005, 0.005]])
         agent._model = mock_model
 
-        vote = agent.analyze("BTC/USDT", make_klines(100), Market.CRYPTO)
+        vote = agent.analyze("NIFTY", make_klines(100), Market.INDIA)
         assert vote.confidence <= 0.90

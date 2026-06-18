@@ -131,7 +131,7 @@ def split_datasets(
 
 def compute_class_weights(dataset: CryptoDataset) -> torch.Tensor:
     """Returns [3] weight tensor for CrossEntropyLoss — upweights LONG/SHORT."""
-    labels = [dataset[i][1] for i in range(len(dataset))]
+    labels = [dataset[i][2] for i in range(len(dataset))]
     counts = np.bincount(labels, minlength=3).astype(np.float32)
     total = counts.sum()
     # Inverse frequency, clipped to [1, 5]

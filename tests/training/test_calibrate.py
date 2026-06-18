@@ -26,7 +26,7 @@ def test_calibrate_writes_json(tmp_path):
         signals.append(
             {
                 "id": f"s{i}",
-                "market": "crypto",
+                "market": "india",
                 "direction": "LONG" if i % 2 == 0 else "SHORT",
                 "outcome": "TARGET_HIT" if i % 3 == 0 else "STOP_HIT",
                 "debate_transcript": f"OnChain: LONG (conf=0.75) — Funding: {-0.0012:.4f} | L/S ratio: 0.80",

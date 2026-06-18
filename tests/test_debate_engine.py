@@ -64,8 +64,11 @@ async def test_consensus_requires_two_agreeing():
 
 
 @pytest.mark.asyncio
-async def test_adjudicator_can_override_to_hold():
+async def test_adjudicator_can_override_to_hold(monkeypatch):
     """Opus adjudicator returning HOLD should override initial LONG consensus."""
+    from config import config
+
+    monkeypatch.setattr(config, "enable_llm_adjudication", True)
     engine = DebateEngine()
     votes = [
         make_vote(Direction.LONG, 0.80, "A"),
@@ -74,6 +77,22 @@ async def test_adjudicator_can_override_to_hold():
     with _mock_debate(Direction.HOLD, 0.0):
         result = await engine.reach_consensus(votes, ticker="ETH/USDT")
     assert result["direction"] == Direction.HOLD
+
+
+@pytest.mark.asyncio
+async def test_llm_adjudication_defaults_off(monkeypatch):
+    from config import config
+
+    monkeypatch.setattr(config, "enable_llm_adjudication", False)
+    engine = DebateEngine()
+    votes = [
+        make_vote(Direction.LONG, 0.80, "A"),
+        make_vote(Direction.LONG, 0.75, "B"),
+    ]
+    with _mock_debate(Direction.HOLD, 0.0) as debate:
+        result = await engine.reach_consensus(votes, ticker="ETH/USDT")
+    assert result["direction"] == Direction.LONG
+    debate.assert_not_awaited()
 
 
 def test_parse_adjudication_fallback():

@@ -1,10 +1,10 @@
 import asyncio
-import json
 from pathlib import Path
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 from core.signal_aggregator import SignalAggregator
+from core.json_store import read_json
 from config import config
 
 app = FastAPI(title="Trading Bot Dashboard")
@@ -66,7 +66,6 @@ async def get_performance():
         "total_hypothetical_pnl_inr": round(total_hyp_pnl, 2),
         "total_actual_pnl_inr": round(actual_pnl, 2),
         "signals_by_market": {
-            "crypto": len([s for s in signals if s["market"] == "crypto"]),
             "india": len([s for s in signals if s["market"] == "india"]),
         },
     }
@@ -75,10 +74,9 @@ async def get_performance():
 @app.get("/api/open-positions")
 async def get_open_positions():
     positions = []
-    for path in [config.crypto_progress_path, config.india_progress_path]:
+    for path in [config.india_progress_path]:
         try:
-            with open(path) as f:
-                state = json.load(f)
+            state = read_json(path, {})
             positions.extend(state.get("open_positions", []))
         except Exception:
             pass
